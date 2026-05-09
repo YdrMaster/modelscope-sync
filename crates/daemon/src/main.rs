@@ -1,10 +1,5 @@
-mod handlers;
-mod server;
-mod state;
-mod tasks;
-
 use clap::Parser;
-use state::{AppState, Config};
+use modelscope_sync_daemon::state::{AppState, Config};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
@@ -45,5 +40,5 @@ async fn main() {
     };
 
     let state = AppState::new(config);
-    server::run(state, &args.bind_addr, prometheus).await;
+    modelscope_sync_daemon::server::run(state, &args.bind_addr, prometheus).await;
 }
