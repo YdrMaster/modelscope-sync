@@ -1,3 +1,5 @@
+mod handlers;
+mod server;
 mod state;
 mod tasks;
 
@@ -35,9 +37,9 @@ async fn main() {
         target_dir: args.target_dir,
         max_concurrent_downloads: args.max_concurrent_downloads,
         api_base: args.api_base,
-        bind_addr: args.bind_addr,
+        bind_addr: args.bind_addr.clone(),
     };
 
-    let _state = AppState::new(config);
-    tracing::info!("state initialized, server not yet started");
+    let state = AppState::new(config);
+    server::run(state, &args.bind_addr).await;
 }
