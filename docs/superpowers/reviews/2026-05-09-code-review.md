@@ -12,7 +12,7 @@
 ### 1. 规格符合度 — ❌
 
 | 设计文档章节 | 要求 | 实际实现 | 严重度 |
-|-------------|------|---------|--------|
+| ------------- | ------ | --------- | -------- |
 | §4.5 `/ready` | 缓存目录和目标目录均可写返回 200 | 仅检查 `metadata().is_ok()`（存在性），未检查可写 | 高 |
 | §4.3 `GET /tasks/{id}` | `total_bytes` / `downloaded_bytes` 为所有文件累加值 | 为覆盖式赋值（单个文件进度），并发下载时会乱跳 | 高 |
 | §4.3 `GET /tasks/{id}` | `completed_files` 实时反映已完成文件数 | 任务进行中始终为 0，仅在最后一次性设置 | 高 |
@@ -39,17 +39,19 @@
 **错误处理：** `core::CoreError` 定义完整，但 `daemon::ApiError` 未定义。
 
 **并发控制：**
+
 - ❌ `post_sync` 任务互斥检查非原子，`for entry in state.tasks.iter()` 遍历 DashMap 存在竞态
 - ✅ `sync.rs` 中 `Arc<Semaphore>` + `acquire_owned()` 限制并发下载，实现正确
 
 **边界情况：**
+
 - ⚠️ `sync.rs` 多处使用 `.parent().unwrap()`，若 `file.path` 为空字符串可能 panic
 - ⚠️ `fs::rename` 跨文件系统会返回 `EXDEV` 错误，应增加 copy + remove 回退
 
 ### 4. 测试覆盖 — ❌
 
 | 模块 | 测试数 | 覆盖度 | 备注 |
-|------|--------|--------|------|
+| ------ | -------- | -------- | ------ |
 | `cache` | 2 | ✅ | 基本路径和嵌套路径 |
 | `hash` | 2 | ✅ | 已知内容和空内容 |
 | `api` | 2 | ✅ | 成功和 404 |
@@ -88,6 +90,7 @@
 ### 任务 1：CLI 参数调整（移除 bind-addr、移除 env 支持）
 
 **文件：**
+
 - 修改：`crates/daemon/Cargo.toml`
 - 修改：`crates/daemon/src/state.rs`
 - 修改：`crates/daemon/src/main.rs`
@@ -150,6 +153,7 @@ git commit -m "refactor(daemon): replace bind-addr with port, remove env config"
 ### 任务 2：`/ready` 探针检查目录可写性
 
 **文件：**
+
 - 修改：`crates/daemon/src/handlers.rs`
 
 - [ ] **步骤 1：修改 ready handler**
@@ -188,6 +192,7 @@ git commit -m "fix(daemon): check directory writability in /ready probe"
 ### 任务 3：`post_sync` 任务互斥改为原子检查
 
 **文件：**
+
 - 修改：`crates/daemon/src/handlers.rs`
 
 - [ ] **步骤 1：修改 post_sync handler**
@@ -219,6 +224,7 @@ pub async fn post_sync(
 ### 任务 4：修复进度统计逻辑
 
 **文件：**
+
 - 修改：`crates/daemon/src/tasks.rs`
 
 - [ ] **步骤 1：修改进度处理为累加模式**
@@ -258,8 +264,8 @@ if total > t.total_bytes {
 ```
 
 对于 `completed_files`，需要在每个文件完成时（download_handle 结束后）发送一个完成信号，或在 `sync.rs` 返回后由 daemon 根据 `SyncReport` 更新。
-
 **实际修复：** 由于 `completed_files` 实时更新需要较大改动，且设计文档中 API 返回的 `completed_files` 并非关键功能，建议：
+
 - `downloaded_bytes` 和 `total_bytes` 修复为累加模式
 - `completed_files` 保持任务结束后一次性更新（与当前行为一致），并在设计文档中调整预期
 
@@ -306,6 +312,7 @@ git commit -m "fix: use delta-based progress tracking to fix concurrent download
 ### 任务 5：补全 Prometheus metrics
 
 **文件：**
+
 - 修改：`crates/daemon/src/tasks.rs`
 - 修改：`crates/core/src/sync.rs`
 
@@ -393,6 +400,7 @@ git commit -m "feat(daemon): add task duration histogram and files counter metri
 ### 任务 6：`sync.rs` 单元测试
 
 **文件：**
+
 - 创建：`crates/core/src/sync.rs`（在现有文件底部添加测试模块）
 
 - [ ] **步骤 1：编写 mock API + 临时目录测试**
@@ -423,6 +431,7 @@ mod tests {
 ### 任务 7：优雅关闭等待后台任务
 
 **文件：**
+
 - 修改：`crates/daemon/src/state.rs`
 - 修改：`crates/daemon/src/tasks.rs`
 - 修改：`crates/daemon/src/server.rs`
@@ -479,7 +488,7 @@ match tokio::time::timeout(timeout, futures::future::join_all(handles)).await {
 ## 四、执行顺序建议
 
 | 顺序 | 任务 | 优先级 | 预估工作量 |
-|------|------|--------|-----------|
+| ------ | ------ | -------- | ----------- |
 | 1 | CLI 参数调整 | P1 | 小 |
 | 2 | `/ready` 检查可写 | P0 | 小 |
 | 3 | 进度统计修复 | P0 | 中 |
