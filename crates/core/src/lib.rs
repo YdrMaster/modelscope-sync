@@ -19,6 +19,14 @@ pub enum CoreError {
 
 pub type Result<T> = std::result::Result<T, CoreError>;
 
+#[derive(Debug, Clone)]
+pub struct SyncReport {
+    pub total_files: usize,
+    pub cached_files: usize,
+    pub downloaded_files: usize,
+    pub failed_files: usize,
+}
+
 pub mod api;
 pub mod cache;
 pub mod download;
