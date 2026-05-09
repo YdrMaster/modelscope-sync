@@ -16,7 +16,8 @@ use std::sync::Arc;
 /// * `state` — Shared application state.
 /// * `bind_addr` — TCP address to listen on (e.g. `"0.0.0.0:8080"`).
 /// * `prometheus` — Prometheus metrics exporter handle.
-pub async fn run(state: Arc<AppState>, bind_addr: &str, prometheus: PrometheusHandle) {
+pub async fn run(state: Arc<AppState>, port: u16, prometheus: PrometheusHandle) {
+    let bind_addr = format!("0.0.0.0:{}", port);
     let app = Router::new()
         .route("/sync", post(handlers::post_sync))
         .route("/tasks/{task_id}", get(handlers::get_task))
@@ -26,7 +27,7 @@ pub async fn run(state: Arc<AppState>, bind_addr: &str, prometheus: PrometheusHa
         .route("/metrics", get(move || async move { prometheus.render() }))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind(bind_addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await

@@ -11,7 +11,7 @@ fn test_state() -> Arc<AppState> {
         target_dir: PathBuf::from("/tmp/test-target"),
         max_concurrent_downloads: 3,
         api_base: "https://test.modelscope.cn".to_string(),
-        bind_addr: "127.0.0.1:0".to_string(),
+        port: 0,
     };
     AppState::new(config)
 }

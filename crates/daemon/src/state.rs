@@ -54,8 +54,8 @@ pub struct Config {
     pub max_concurrent_downloads: usize,
     /// Base URL of the ModelScope API.
     pub api_base: String,
-    /// TCP address to bind the HTTP server to.
-    pub bind_addr: String,
+    /// TCP port to listen on.
+    pub port: u16,
 }
 
 /// Shared application state accessible from all request handlers and background tasks.
