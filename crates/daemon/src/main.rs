@@ -32,6 +32,10 @@ async fn main() {
     tracing_subscriber::fmt::init();
     tracing::info!("daemon starting with args: {:?}", args);
 
+    let recorder = metrics_exporter_prometheus::PrometheusBuilder::new().build_recorder();
+    let prometheus = recorder.handle();
+    metrics::set_global_recorder(recorder).unwrap();
+
     let config = Config {
         cache_dir: args.cache_dir,
         target_dir: args.target_dir,
@@ -41,5 +45,5 @@ async fn main() {
     };
 
     let state = AppState::new(config);
-    server::run(state, &args.bind_addr).await;
+    server::run(state, &args.bind_addr, prometheus).await;
 }

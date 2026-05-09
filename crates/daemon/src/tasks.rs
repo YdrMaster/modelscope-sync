@@ -94,6 +94,9 @@ async fn run_sync(model_id: String, task_id: String, state: Arc<AppState>) {
         }
     }
 
+    let status_label = format!("{:?}", task.status).to_lowercase();
+    metrics::counter!("modelscope_sync_tasks_total", "status" => status_label).increment(1);
+
     state.tasks.insert(task_id, task.clone());
     let _ = state.broadcast.send(task);
 }
