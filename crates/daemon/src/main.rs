@@ -1,4 +1,5 @@
 mod state;
+mod tasks;
 
 use clap::Parser;
 use state::{AppState, Config};
