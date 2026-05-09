@@ -1,3 +1,5 @@
+/// HTTP API error types.
+pub mod error;
 /// HTTP request handlers for the daemon REST API.
 pub mod handlers;
 /// Axum server bootstrap and graceful shutdown.

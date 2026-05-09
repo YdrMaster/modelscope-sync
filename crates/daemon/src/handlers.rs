@@ -1,3 +1,4 @@
+use crate::error::ApiError;
 use crate::state::{AppState, TaskState, TaskStatus};
 use axum::{
     extract::{Path, State},
@@ -93,10 +94,10 @@ pub async fn post_sync(
 pub async fn get_task(
     State(state): State<Arc<AppState>>,
     Path(task_id): Path<String>,
-) -> impl IntoResponse {
+) -> Result<Json<TaskResponse>, ApiError> {
     match state.tasks.get(&task_id) {
-        Some(task) => (StatusCode::OK, Json(TaskResponse::from(task.clone()))).into_response(),
-        None => (StatusCode::NOT_FOUND, "task not found").into_response(),
+        Some(task) => Ok(Json(TaskResponse::from(task.clone()))),
+        None => Err(ApiError::TaskNotFound),
     }
 }
 
