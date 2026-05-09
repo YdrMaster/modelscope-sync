@@ -56,10 +56,10 @@ async fn run_sync(model_id: String, task_id: String, state: Arc<AppState>) {
         let state = state.clone();
         let task_id = task_id.clone();
         tokio::spawn(async move {
-            while let Some((_path, downloaded, total)) = rx.recv().await {
+            while let Some((_path, delta, total)) = rx.recv().await {
                 if let Some(mut t) = state.tasks.get_mut(&task_id) {
-                    t.downloaded_bytes = downloaded;
-                    if total > 0 {
+                    t.downloaded_bytes += delta;
+                    if total > t.total_bytes {
                         t.total_bytes = total;
                     }
                     t.updated_at = chrono::Utc::now();

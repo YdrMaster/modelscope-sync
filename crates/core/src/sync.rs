@@ -91,11 +91,14 @@ pub async fn sync_model(
                 download::stream_download(&client, &url, &mut file_handle, inner_tx).await
             });
 
-            // Forward download progress to the caller.
+            // Forward download progress to the caller (delta-based).
             let file_path_for_progress = file.path.clone();
             let progress_forward = tokio::spawn(async move {
+                let mut last_bytes = 0u64;
                 while let Some(bytes) = inner_rx.recv().await {
-                    let _ = progress_tx.send((file_path_for_progress.clone(), bytes, file_size)).await;
+                    let delta = bytes.saturating_sub(last_bytes);
+                    last_bytes = bytes;
+                    let _ = progress_tx.send((file_path_for_progress.clone(), delta, file_size)).await;
                 }
             });
 
