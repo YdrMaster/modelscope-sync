@@ -153,3 +153,218 @@ async fn verify_file(path: &std::path::Path, expected: &str) -> std::io::Result<
     let hash = hash::sha256_stream(file).await?;
     Ok(hash == expected)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::matchers::{method, path};
+    use std::path::Path;
+
+    async fn compute_sha256(data: &[u8]) -> String {
+        use crate::hash;
+        let cursor = std::io::Cursor::new(data);
+        hash::sha256_stream(cursor).await.unwrap()
+    }
+
+    async fn write_file(dir: &Path, relative: &str, content: &[u8]) {
+        let path = dir.join(relative);
+        tokio::fs::create_dir_all(path.parent().unwrap()).await.unwrap();
+        tokio::fs::write(&path, content).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_sync_model_all_target_hits() {
+        let server = MockServer::start().await;
+        let model_id = "test-model";
+
+        let content1 = b"hello world file1";
+        let content2 = b"hello world file2";
+        let hash1 = compute_sha256(content1).await;
+        let hash2 = compute_sha256(content2).await;
+
+        let body = format!(
+            r#"{{"files":[{{"path":"file1.txt","sha256":"{}","size":{}}},{{"path":"file2.txt","sha256":"{}","size":{}}}]}}"#,
+            hash1,
+            content1.len(),
+            hash2,
+            content2.len()
+        );
+
+        Mock::given(method("GET"))
+            .and(path("/api/v1/models/test-model/repo"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body))
+            .mount(&server)
+            .await;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+        let target_dir = tempfile::tempdir().unwrap();
+
+        // Pre-create files in target_dir with correct content.
+        write_file(target_dir.path(), "test-model/file1.txt", content1).await;
+        write_file(target_dir.path(), "test-model/file2.txt", content2).await;
+
+        let client = reqwest::Client::new();
+        let (tx, _rx) = tokio::sync::mpsc::channel(10);
+
+        let report = sync_model(
+            &client,
+            &server.uri(),
+            model_id,
+            cache_dir.path(),
+            target_dir.path(),
+            2,
+            tx,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(report.total_files, 2);
+        assert_eq!(report.cached_files, 2);
+        assert_eq!(report.downloaded_files, 0);
+        assert_eq!(report.failed_files, 0);
+    }
+
+    #[tokio::test]
+    async fn test_sync_model_cache_hits() {
+        let server = MockServer::start().await;
+        let model_id = "test-model";
+
+        let content = b"cached file content";
+        let hash = compute_sha256(content).await;
+
+        let body = format!(
+            r#"{{"files":[{{"path":"model.bin","sha256":"{}","size":{}}}]}}"#,
+            hash,
+            content.len()
+        );
+
+        Mock::given(method("GET"))
+            .and(path("/api/v1/models/test-model/repo"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body))
+            .mount(&server)
+            .await;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+        let target_dir = tempfile::tempdir().unwrap();
+
+        // Pre-create file in cache_dir with correct content.
+        write_file(cache_dir.path(), "test-model/model.bin", content).await;
+
+        let client = reqwest::Client::new();
+        let (tx, _rx) = tokio::sync::mpsc::channel(10);
+
+        let report = sync_model(
+            &client,
+            &server.uri(),
+            model_id,
+            cache_dir.path(),
+            target_dir.path(),
+            2,
+            tx,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(report.total_files, 1);
+        assert_eq!(report.cached_files, 1);
+        assert_eq!(report.downloaded_files, 0);
+        assert_eq!(report.failed_files, 0);
+
+        // File should be moved to target_dir.
+        let target_path = target_dir.path().join("test-model/model.bin");
+        assert!(target_path.exists());
+
+        // File should be removed from cache_dir.
+        let cache_path = cache_dir.path().join("test-model/model.bin");
+        assert!(!cache_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_sync_model_download_then_fail_hash() {
+        let server = MockServer::start().await;
+        let model_id = "test-model";
+
+        let content = b"downloaded content";
+        let wrong_hash = "0000000000000000000000000000000000000000000000000000000000000000";
+
+        let body = format!(
+            r#"{{"files":[{{"path":"data.bin","sha256":"{}","size":{}}}]}}"#,
+            wrong_hash,
+            content.len()
+        );
+
+        Mock::given(method("GET"))
+            .and(path("/api/v1/models/test-model/repo"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/resolve/test-model/data.bin"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(content.as_slice()))
+            .mount(&server)
+            .await;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+        let target_dir = tempfile::tempdir().unwrap();
+
+        let client = reqwest::Client::new();
+        let (tx, _rx) = tokio::sync::mpsc::channel(10);
+
+        let report = sync_model(
+            &client,
+            &server.uri(),
+            model_id,
+            cache_dir.path(),
+            target_dir.path(),
+            2,
+            tx,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(report.total_files, 1);
+        assert_eq!(report.cached_files, 0);
+        assert_eq!(report.downloaded_files, 0);
+        assert_eq!(report.failed_files, 1);
+
+        // No temp file should remain in cache_dir.
+        let cache_model_dir = cache_dir.path().join("test-model");
+        if cache_model_dir.exists() {
+            let entries: Vec<_> = std::fs::read_dir(&cache_model_dir).unwrap().collect();
+            assert!(entries.is_empty(), "temp files should be cleaned up");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sync_model_api_not_found() {
+        let server = MockServer::start().await;
+        let model_id = "not-found";
+
+        Mock::given(method("GET"))
+            .and(path("/api/v1/models/not-found/repo"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        let cache_dir = tempfile::tempdir().unwrap();
+        let target_dir = tempfile::tempdir().unwrap();
+
+        let client = reqwest::Client::new();
+        let (tx, _rx) = tokio::sync::mpsc::channel(10);
+
+        let result = sync_model(
+            &client,
+            &server.uri(),
+            model_id,
+            cache_dir.path(),
+            target_dir.path(),
+            2,
+            tx,
+        )
+        .await;
+
+        assert!(matches!(result, Err(CoreError::ApiRequest(_))));
+    }
+}
