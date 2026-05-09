@@ -133,14 +133,26 @@ pub async fn health() -> impl IntoResponse {
 
 /// Kubernetes readiness probe.
 ///
-/// Returns `200 OK` if both `cache_dir` and `target_dir` are accessible,
+/// Returns `200 OK` if both `cache_dir` and `target_dir` exist and are writable,
 /// otherwise `503 SERVICE_UNAVAILABLE`.
 pub async fn ready(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let cache_ok = tokio::fs::metadata(&state.config.cache_dir).await.is_ok();
-    let target_ok = tokio::fs::metadata(&state.config.target_dir).await.is_ok();
+    let cache_ok = is_dir_writable(&state.config.cache_dir).await;
+    let target_ok = is_dir_writable(&state.config.target_dir).await;
     if cache_ok && target_ok {
         (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
     } else {
         (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"status": "not ready"})))
+    }
+}
+
+/// Verify that a directory exists and is writable by creating and removing a temporary file.
+async fn is_dir_writable(path: &std::path::Path) -> bool {
+    match tokio::fs::metadata(path).await {
+        Ok(meta) if meta.is_dir() => {
+            let test_file = path.join(".ready_test");
+            tokio::fs::write(&test_file, b"").await.is_ok()
+                && tokio::fs::remove_file(&test_file).await.is_ok()
+        }
+        _ => false,
     }
 }
