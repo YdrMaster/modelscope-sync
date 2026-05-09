@@ -44,6 +44,7 @@ pub async fn spawn_sync_task(model_id: String, state: Arc<AppState>) -> String {
 }
 
 async fn run_sync(model_id: String, task_id: String, state: Arc<AppState>) {
+    let start = std::time::Instant::now();
     let mut task = state.tasks.get(&task_id).unwrap().clone();
     task.status = TaskStatus::Running;
     task.updated_at = chrono::Utc::now();
@@ -86,7 +87,7 @@ async fn run_sync(model_id: String, task_id: String, state: Arc<AppState>) {
     let mut task = state.tasks.get(&task_id).unwrap().clone();
     task.updated_at = chrono::Utc::now();
 
-    match result {
+    match &result {
         Ok(report) => {
             task.status = if report.failed_files > 0 {
                 TaskStatus::Failed
@@ -96,6 +97,10 @@ async fn run_sync(model_id: String, task_id: String, state: Arc<AppState>) {
             task.total_files = report.total_files;
             task.completed_files = report.cached_files + report.downloaded_files;
             task.cached_files = report.cached_files;
+            metrics::counter!("modelscope_sync_files_total", "status" => "success")
+                .increment((report.cached_files + report.downloaded_files) as u64);
+            metrics::counter!("modelscope_sync_files_total", "status" => "failed")
+                .increment(report.failed_files as u64);
         }
         Err(e) => {
             task.status = TaskStatus::Failed;
@@ -105,6 +110,9 @@ async fn run_sync(model_id: String, task_id: String, state: Arc<AppState>) {
 
     let status_label = format!("{:?}", task.status).to_lowercase();
     metrics::counter!("modelscope_sync_tasks_total", "status" => status_label).increment(1);
+
+    let duration = start.elapsed().as_secs_f64();
+    metrics::histogram!("modelscope_sync_task_duration_seconds").record(duration);
 
     state.tasks.insert(task_id, task.clone());
     let _ = state.broadcast.send(task);
