@@ -11,28 +11,44 @@ use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 
+/// Request body for `POST /sync`.
 #[derive(Deserialize)]
 pub struct SyncRequest {
+    /// The model identifier to synchronize (e.g. `Qwen/Qwen-7B-Chat`).
     pub model_id: String,
 }
 
+/// Response body for `POST /sync`.
 #[derive(Serialize)]
 pub struct SyncResponse {
+    /// The unique task ID assigned to this synchronization request.
     pub task_id: String,
 }
 
+/// Response body for `GET /tasks/{task_id}`.
 #[derive(Serialize)]
 pub struct TaskResponse {
+    /// Unique identifier of the task.
     pub task_id: String,
+    /// Current status: `pending`, `running`, `success`, or `failed`.
     pub status: String,
+    /// The model being synchronized.
     pub model_id: String,
+    /// Total number of files in the repository.
     pub total_files: usize,
+    /// Number of files processed so far.
     pub completed_files: usize,
+    /// Cumulative bytes downloaded.
     pub downloaded_bytes: u64,
+    /// Total expected bytes (may be zero until known).
     pub total_bytes: u64,
+    /// Number of files that were already present and valid.
     pub cached_files: usize,
+    /// Error message if the task failed.
     pub error: Option<String>,
+    /// ISO-8601 timestamp when the task was created.
     pub created_at: String,
+    /// ISO-8601 timestamp of the most recent update.
     pub updated_at: String,
 }
 
@@ -54,6 +70,10 @@ impl From<TaskState> for TaskResponse {
     }
 }
 
+/// Submit a new model synchronization task.
+///
+/// Returns `202 Accepted` with the task ID. If a task for the same model is
+/// already pending or running, the existing task ID is returned instead.
 pub async fn post_sync(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SyncRequest>,
@@ -69,6 +89,7 @@ pub async fn post_sync(
     (StatusCode::ACCEPTED, Json(SyncResponse { task_id }))
 }
 
+/// Query the current state of a synchronization task.
 pub async fn get_task(
     State(state): State<Arc<AppState>>,
     Path(task_id): Path<String>,
@@ -79,6 +100,10 @@ pub async fn get_task(
     }
 }
 
+/// Subscribe to Server-Sent Events for a specific task.
+///
+/// The stream emits JSON-encoded [`TaskResponse`] objects whenever the task
+/// state changes.
 pub async fn get_task_events(
     State(state): State<Arc<AppState>>,
     Path(task_id): Path<String>,
@@ -99,10 +124,17 @@ pub async fn get_task_events(
     Sse::new(filtered)
 }
 
+/// Kubernetes liveness probe.
+///
+/// Returns `200 OK` as long as the HTTP server is running.
 pub async fn health() -> impl IntoResponse {
     Json(serde_json::json!({"status": "ok"}))
 }
 
+/// Kubernetes readiness probe.
+///
+/// Returns `200 OK` if both `cache_dir` and `target_dir` are accessible,
+/// otherwise `503 SERVICE_UNAVAILABLE`.
 pub async fn ready(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let cache_ok = tokio::fs::metadata(&state.config.cache_dir).await.is_ok();
     let target_ok = tokio::fs::metadata(&state.config.target_dir).await.is_ok();

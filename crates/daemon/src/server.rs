@@ -7,6 +7,15 @@ use axum::{
 use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
 
+/// Start the HTTP server and block until a shutdown signal is received.
+///
+/// Registers all REST routes and the Prometheus `/metrics` endpoint.
+/// Gracefully shuts down on `Ctrl+C` (all platforms) or `SIGTERM` (Unix).
+///
+/// # Arguments
+/// * `state` — Shared application state.
+/// * `bind_addr` — TCP address to listen on (e.g. `"0.0.0.0:8080"`).
+/// * `prometheus` — Prometheus metrics exporter handle.
 pub async fn run(state: Arc<AppState>, bind_addr: &str, prometheus: PrometheusHandle) {
     let app = Router::new()
         .route("/sync", post(handlers::post_sync))

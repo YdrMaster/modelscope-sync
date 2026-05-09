@@ -1,6 +1,15 @@
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
+/// Compute the SHA-256 hash of a stream asynchronously.
+///
+/// Reads the input in 8 KiB chunks to avoid loading large files into memory.
+///
+/// # Arguments
+/// * `reader` — Any asynchronous reader.
+///
+/// # Returns
+/// The lowercase hexadecimal representation of the SHA-256 digest.
 pub async fn sha256_stream<R: AsyncRead + Unpin>(mut reader: R) -> std::io::Result<String> {
     let mut hasher = Sha256::new();
     let mut buf = [0u8; 8192];

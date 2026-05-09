@@ -7,6 +7,12 @@ struct ApiResponse {
     files: Vec<FileMeta>,
 }
 
+/// Fetch the list of files and their metadata from the ModelScope API.
+///
+/// # Arguments
+/// * `client` — The HTTP client to use.
+/// * `base_url` — Base URL of the ModelScope instance (e.g. `https://www.modelscope.cn`).
+/// * `model_id` — The model identifier (e.g. `Qwen/Qwen-7B-Chat`).
 pub async fn fetch_repo_files(client: &Client, base_url: &str, model_id: &str) -> Result<Vec<FileMeta>> {
     let url = format!("{}/api/v1/models/{}/repo", base_url, model_id);
     let resp: ApiResponse = client.get(&url).send().await?.json().await?;

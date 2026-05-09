@@ -3,6 +3,15 @@ use modelscope_sync_core::sync;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+/// Create a new synchronization task and spawn it in the background.
+///
+/// Returns the `task_id` immediately so the caller can poll for status.
+/// If a task for the same `model_id` is already running the existing
+/// task ID is returned instead (de-duplication).
+///
+/// # Arguments
+/// * `model_id` — The model to synchronize.
+/// * `state` — Shared application state.
 pub async fn spawn_sync_task(model_id: String, state: Arc<AppState>) -> String {
     let task_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now();
