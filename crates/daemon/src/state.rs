@@ -1,7 +1,8 @@
 use dashmap::DashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Notify};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Snapshot of a synchronization task's current state.
 #[derive(Debug, Clone)]
@@ -68,6 +69,10 @@ pub struct AppState {
     pub broadcast: broadcast::Sender<TaskState>,
     /// Shared HTTP client for API calls and downloads.
     pub reqwest_client: reqwest::Client,
+    /// Number of currently active synchronization tasks.
+    pub active_tasks: Arc<AtomicUsize>,
+    /// Notified when a shutdown signal is received.
+    pub shutdown: Notify,
 }
 
 impl AppState {
@@ -79,6 +84,8 @@ impl AppState {
             config,
             broadcast,
             reqwest_client: reqwest::Client::new(),
+            active_tasks: Arc::new(AtomicUsize::new(0)),
+            shutdown: Notify::new(),
         })
     }
 }

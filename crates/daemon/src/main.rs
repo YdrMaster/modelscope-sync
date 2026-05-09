@@ -40,5 +40,62 @@ async fn main() {
     };
 
     let state = AppState::new(config);
-    modelscope_sync_daemon::server::run(state, args.port, prometheus).await;
+
+    let server_handle = {
+        let state = state.clone();
+        tokio::spawn(async move {
+            modelscope_sync_daemon::server::run(state, args.port, prometheus).await;
+        })
+    };
+
+    let shutdown = {
+        let state = state.clone();
+        async move {
+            let ctrl_c = async {
+                tokio::signal::ctrl_c()
+                    .await
+                    .expect("failed to install Ctrl+C handler");
+            };
+
+            #[cfg(unix)]
+            let terminate = async {
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .expect("failed to install signal handler")
+                    .recv()
+                    .await;
+            };
+
+            #[cfg(not(unix))]
+            let terminate = std::future::pending::<()>();
+
+            tokio::select! {
+                _ = ctrl_c => {},
+                _ = terminate => {},
+            }
+
+            tracing::info!("shutdown signal received, starting graceful shutdown");
+            state.shutdown.notify_waiters();
+        }
+    };
+
+    tokio::select! {
+        _ = server_handle => {},
+        _ = shutdown => {},
+    }
+
+    // Wait for active background tasks to complete (up to 30s).
+    let timeout = std::time::Duration::from_secs(30);
+    let start = std::time::Instant::now();
+    while state.active_tasks.load(std::sync::atomic::Ordering::Relaxed) > 0 {
+        if start.elapsed() > timeout {
+            tracing::warn!(
+                "shutdown timed out, {} tasks still active",
+                state.active_tasks.load(std::sync::atomic::Ordering::Relaxed)
+            );
+            break;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
+    tracing::info!("daemon shutdown complete");
 }

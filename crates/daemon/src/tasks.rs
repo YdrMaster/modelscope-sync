@@ -32,6 +32,7 @@ pub async fn spawn_sync_task(model_id: String, state: Arc<AppState>) -> String {
 
     state.tasks.insert(task_id.clone(), task.clone());
     let _ = state.broadcast.send(task);
+    state.active_tasks.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     let task_id_clone = task_id.clone();
     let state_clone = state.clone();
@@ -114,6 +115,7 @@ async fn run_sync(model_id: String, task_id: String, state: Arc<AppState>) {
     let duration = start.elapsed().as_secs_f64();
     metrics::histogram!("modelscope_sync_task_duration_seconds").record(duration);
 
+    state.active_tasks.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
     state.tasks.insert(task_id, task.clone());
     let _ = state.broadcast.send(task);
 }

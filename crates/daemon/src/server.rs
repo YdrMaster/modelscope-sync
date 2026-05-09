@@ -25,11 +25,13 @@ pub async fn run(state: Arc<AppState>, port: u16, prometheus: PrometheusHandle) 
         .route("/health", get(handlers::health))
         .route("/ready", get(handlers::ready))
         .route("/metrics", get(move || async move { prometheus.render() }))
-        .with_state(state);
+        .with_state(state.clone());
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(async move {
+            state.shutdown.notified().await;
+        })
         .await
         .unwrap();
 }
