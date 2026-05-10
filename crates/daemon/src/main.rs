@@ -24,7 +24,9 @@ struct Args {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    tracing_subscriber::fmt::init();
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
     tracing::info!("daemon starting with args: {:?}", args);
 
     let recorder = metrics_exporter_prometheus::PrometheusBuilder::new().build_recorder();
@@ -86,11 +88,17 @@ async fn main() {
     // Wait for active background tasks to complete (up to 30s).
     let timeout = std::time::Duration::from_secs(30);
     let start = std::time::Instant::now();
-    while state.active_tasks.load(std::sync::atomic::Ordering::Relaxed) > 0 {
+    while state
+        .active_tasks
+        .load(std::sync::atomic::Ordering::Relaxed)
+        > 0
+    {
         if start.elapsed() > timeout {
             tracing::warn!(
                 "shutdown timed out, {} tasks still active",
-                state.active_tasks.load(std::sync::atomic::Ordering::Relaxed)
+                state
+                    .active_tasks
+                    .load(std::sync::atomic::Ordering::Relaxed)
             );
             break;
         }

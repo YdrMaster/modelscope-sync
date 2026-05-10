@@ -1,16 +1,16 @@
 use crate::error::ApiError;
 use crate::state::{AppState, TaskState, TaskStatus};
+use axum::http::StatusCode;
 use axum::{
+    Json,
     extract::{Path, State},
     response::{IntoResponse, Sse},
-    Json,
 };
-use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
+use tokio_stream::wrappers::BroadcastStream;
 
 /// Request body for `POST /sync`.
 #[derive(Deserialize)]
@@ -81,8 +81,15 @@ pub async fn post_sync(
 ) -> impl IntoResponse {
     for entry in state.tasks.iter() {
         let task = entry.value();
-        if task.model_id == req.model_id && (task.status == TaskStatus::Pending || task.status == TaskStatus::Running) {
-            return (StatusCode::ACCEPTED, Json(SyncResponse { task_id: task.task_id.clone() }));
+        if task.model_id == req.model_id
+            && (task.status == TaskStatus::Pending || task.status == TaskStatus::Running)
+        {
+            return (
+                StatusCode::ACCEPTED,
+                Json(SyncResponse {
+                    task_id: task.task_id.clone(),
+                }),
+            );
         }
     }
 
@@ -108,20 +115,19 @@ pub async fn get_task(
 pub async fn get_task_events(
     State(state): State<Arc<AppState>>,
     Path(task_id): Path<String>,
-) -> Sse<impl tokio_stream::Stream<Item = Result<axum::response::sse::Event, broadcast::error::RecvError>>> {
+) -> Sse<
+    impl tokio_stream::Stream<Item = Result<axum::response::sse::Event, broadcast::error::RecvError>>,
+> {
     let rx = state.broadcast.subscribe();
-    let filtered = BroadcastStream::new(rx)
-        .filter_map(move |result| {
-            match result {
-                Ok(task) if task.task_id == task_id => {
-                    let event = axum::response::sse::Event::default()
-                        .json_data(TaskResponse::from(task))
-                        .unwrap();
-                    Some(Ok::<_, broadcast::error::RecvError>(event))
-                }
-                _ => None,
-            }
-        });
+    let filtered = BroadcastStream::new(rx).filter_map(move |result| match result {
+        Ok(task) if task.task_id == task_id => {
+            let event = axum::response::sse::Event::default()
+                .json_data(TaskResponse::from(task))
+                .unwrap();
+            Some(Ok::<_, broadcast::error::RecvError>(event))
+        }
+        _ => None,
+    });
     Sse::new(filtered)
 }
 
@@ -142,7 +148,10 @@ pub async fn ready(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     if cache_ok && target_ok {
         (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
     } else {
-        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"status": "not ready"})))
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({"status": "not ready"})),
+        )
     }
 }
 

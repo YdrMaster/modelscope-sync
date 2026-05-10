@@ -20,7 +20,13 @@ pub async fn sha256_stream<R: AsyncRead + Unpin>(mut reader: R) -> std::io::Resu
         }
         hasher.update(&buf[..n]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest.iter() {
+        use std::fmt::Write;
+        write!(hex, "{:02x}", byte).unwrap();
+    }
+    Ok(hex)
 }
 
 #[cfg(test)]
@@ -32,7 +38,10 @@ mod tests {
         let data = b"hello world";
         let reader = std::io::Cursor::new(data.as_slice());
         let hash = sha256_stream(reader).await.unwrap();
-        assert_eq!(hash, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9");
+        assert_eq!(
+            hash,
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
     }
 
     #[tokio::test]
@@ -40,6 +49,9 @@ mod tests {
         let data = b"";
         let reader = std::io::Cursor::new(data.as_slice());
         let hash = sha256_stream(reader).await.unwrap();
-        assert_eq!(hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        assert_eq!(
+            hash,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
     }
 }

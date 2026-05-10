@@ -1,8 +1,8 @@
 use dashmap::DashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Notify};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::AtomicUsize;
+use tokio::sync::{Notify, broadcast};
 
 /// Snapshot of a synchronization task's current state.
 #[derive(Debug, Clone)]
@@ -83,7 +83,10 @@ impl AppState {
             tasks: DashMap::new(),
             config,
             broadcast,
-            reqwest_client: reqwest::Client::new(),
+            reqwest_client: reqwest::Client::builder()
+                .user_agent("modelscope-sync/0.1.0")
+                .build()
+                .unwrap(),
             active_tasks: Arc::new(AtomicUsize::new(0)),
             shutdown: Notify::new(),
         })

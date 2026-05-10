@@ -24,10 +24,10 @@ cargo build --release -p modelscope-sync-daemon
 
 ```bash
 ./target/release/modelscope-sync-daemon \
-  --cache-dir /var/cache/modelscope \
-  --target-dir /mnt/models \
-  --max-concurrent 3 \
-  --bind-addr 0.0.0.0:8080
+  --cache-dir cache \
+  --target-dir models \
+  --max-concurrent-downloads 3 \
+  --port 8080
 ```
 
 或使用环境变量：
@@ -35,8 +35,8 @@ cargo build --release -p modelscope-sync-daemon
 ```bash
 CACHE_DIR=/var/cache/modelscope \
 TARGET_DIR=/mnt/models \
-MAX_CONCURRENT=3 \
-BIND_ADDR=0.0.0.0:8080 \
+MAX_CONCURRENT_DOWNLOADS=3 \
+PORT=8080 \
 ./target/release/modelscope-sync-daemon
 ```
 
@@ -46,9 +46,9 @@ BIND_ADDR=0.0.0.0:8080 \
 | ------ | --------- | -------- | ------ |
 | `--cache-dir` | `CACHE_DIR` | `/var/cache/modelscope` | 下载缓存目录（暂存区） |
 | `--target-dir` | `TARGET_DIR` | `/mnt/models` | 目标存储目录 |
-| `--max-concurrent` | `MAX_CONCURRENT` | `3` | 最大并发下载文件数 |
+| `--max-concurrent-downloads` | `MAX_CONCURRENT_DOWNLOADS` | `3` | 最大并发下载文件数 |
 | `--api-base` | `API_BASE` | `https://www.modelscope.cn` | ModelScope API 地址 |
-| `--bind-addr` | `BIND_ADDR` | `0.0.0.0:8080` | HTTP 服务监听地址 |
+| `--port` | `PORT` | `8080` | HTTP 服务监听端口 |
 
 ## HTTP API
 

@@ -23,6 +23,9 @@ pub enum CoreError {
     /// The downloaded file's SHA-256 hash does not match the expected value.
     #[error("hash mismatch")]
     HashMismatch,
+    /// The ModelScope API returned an error response.
+    #[error("api response error: {message}")]
+    ApiResponseError { message: String },
 }
 
 /// Convenient type alias for results in the core crate.

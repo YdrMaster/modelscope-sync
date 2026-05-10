@@ -37,8 +37,8 @@ pub async fn stream_download<W: AsyncWrite + Unpin>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::{Mock, MockServer, ResponseTemplate};
     use wiremock::matchers::method;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
     async fn test_stream_download_success() {
@@ -52,10 +52,17 @@ mod tests {
         let client = reqwest::Client::new();
         let mut writer = Vec::new();
         let (tx, mut rx) = tokio::sync::mpsc::channel(10);
-        
-        stream_download(&client, &format!("{}/file.bin", server.uri()), &mut writer, tx).await.unwrap();
+
+        stream_download(
+            &client,
+            &format!("{}/file.bin", server.uri()),
+            &mut writer,
+            tx,
+        )
+        .await
+        .unwrap();
         assert_eq!(writer, body);
-        
+
         // Verify progress was sent.
         let progress = rx.recv().await;
         assert!(progress.is_some());

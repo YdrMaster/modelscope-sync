@@ -20,11 +20,19 @@ fn test_state() -> Arc<AppState> {
 async fn test_health_endpoint() {
     let state = test_state();
     let app = axum::Router::new()
-        .route("/health", axum::routing::get(modelscope_sync_daemon::handlers::health))
+        .route(
+            "/health",
+            axum::routing::get(modelscope_sync_daemon::handlers::health),
+        )
         .with_state(state);
 
     let response = app
-        .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -35,24 +43,37 @@ async fn test_health_endpoint() {
 async fn test_ready_endpoint() {
     let state = test_state();
     let app = axum::Router::new()
-        .route("/ready", axum::routing::get(modelscope_sync_daemon::handlers::ready))
+        .route(
+            "/ready",
+            axum::routing::get(modelscope_sync_daemon::handlers::ready),
+        )
         .with_state(state);
 
     let response = app
-        .oneshot(Request::builder().uri("/ready").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/ready")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
     // ready 会检查目录是否存在，/tmp/test-cache 和 /tmp/test-target 可能不存在
     // 所以可能返回 503，这也是可以接受的
-    assert!(response.status() == StatusCode::OK || response.status() == StatusCode::SERVICE_UNAVAILABLE);
+    assert!(
+        response.status() == StatusCode::OK || response.status() == StatusCode::SERVICE_UNAVAILABLE
+    );
 }
 
 #[tokio::test]
 async fn test_sync_endpoint_returns_202() {
     let state = test_state();
     let app = axum::Router::new()
-        .route("/sync", axum::routing::post(modelscope_sync_daemon::handlers::post_sync))
+        .route(
+            "/sync",
+            axum::routing::post(modelscope_sync_daemon::handlers::post_sync),
+        )
         .with_state(state);
 
     let body = axum::body::Body::from(r#"{"model_id":"test-model"}"#);
