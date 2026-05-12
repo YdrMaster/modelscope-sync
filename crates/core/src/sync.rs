@@ -4,32 +4,33 @@ use tokio::fs;
 use tokio::sync::mpsc::Sender;
 use tracing::{error, info};
 
-/// Synchronize an entire model repository from ModelScope to the local filesystem.
+/// 将完整的模型仓库从 ModelScope 同步到本地文件系统。
 ///
-/// For each file in the repository the following precedence is applied:
-/// 1. **Target hit** — If the file already exists in `target_dir` and its SHA-256
-///    matches, the file is skipped and any stale copy in `cache_dir` is removed.
-/// 2. **Cache hit** — If the file exists in `cache_dir` and its SHA-256 matches,
-///    it is atomically moved to `target_dir`.
-/// 3. **Download** — Otherwise the file is streamed down to a temporary location
-///    in `cache_dir`, its hash is verified, and then it is atomically moved to
-///    `target_dir`.
+/// 对仓库中的每个文件按以下优先级处理：
 ///
-/// Downloads are limited by a global `Semaphore` so that at most
-/// `max_concurrent` files are downloaded in parallel.
+/// 1. **目标命中** — 如果文件已存在于 `target_dir` 且 SHA-256 校验通过，
+///    则跳过下载，并删除 `cache_dir` 中的旧副本。
+/// 2. **缓存命中** — 如果文件已存在于 `cache_dir` 且 SHA-256 校验通过，
+///    则将其原子移动到 `target_dir`。
+/// 3. **下载** — 否则将文件流式下载到 `cache_dir` 的临时位置，
+///    校验哈希后原子移动到 `target_dir`。
+///
+/// 下载通过全局 `Semaphore` 限流，最多同时下载 `max_concurrent` 个文件。
 ///
 /// # Arguments
-/// * `client` — HTTP client for API and download requests.
-/// * `api_base` — Base URL of the ModelScope instance.
-/// * `model_id` — The model identifier.
-/// * `cache_dir` — Local staging directory for downloads.
-/// * `target_dir` — Final destination directory for model files.
-/// * `max_concurrent` — Maximum number of simultaneous file downloads.
-/// * `progress_tx` — Channel sender for per-file progress updates
-///   `(file_path, downloaded_bytes, total_bytes)`.
+///
+/// - `client`: 用于 API 和下载请求的 HTTP 客户端。
+/// - `api_base`: ModelScope 实例的基础 URL。
+/// - `model_id`: 模型标识符。
+/// - `cache_dir`: 本地下载暂存目录。
+/// - `target_dir`: 模型文件的最终目标目录。
+/// - `max_concurrent`: 最大并发下载文件数。
+/// - `progress_tx`: 用于发送每个文件进度更新
+///   `(file_path, downloaded_bytes, total_bytes)` 的通道发送端。
 ///
 /// # Returns
-/// A [`SyncReport`] summarizing the outcome.
+///
+/// 返回 [`SyncReport`] 汇总同步结果。
 pub async fn sync_model(
     client: &reqwest::Client,
     api_base: &str,
@@ -68,7 +69,7 @@ pub async fn sync_model(
             let target_path = cache::resolve_path(&target_dir, &model_id, &file.path);
             let cache_path = cache::resolve_path(&cache_dir, &model_id, &file.path);
 
-            // 1. Check target directory.
+            // 1. 检查目标目录。
             if let Ok(true) = verify_file(&target_path, &file.sha256).await {
                 info!(path = %file.path, "目标目录命中，跳过下载");
                 if cache_path.exists() {
@@ -77,7 +78,7 @@ pub async fn sync_model(
                 return Ok((file.path, true, false));
             }
 
-            // 2. Check cache directory.
+            // 2. 检查缓存目录。
             if let Ok(true) = verify_file(&cache_path, &file.sha256).await {
                 info!(path = %file.path, "缓存目录命中，移动到目标目录");
                 fs::create_dir_all(target_path.parent().unwrap()).await?;
@@ -85,7 +86,7 @@ pub async fn sync_model(
                 return Ok((file.path, true, false));
             }
 
-            // 3. Download to cache directory.
+            // 3. 下载到缓存目录。
             info!(path = %file.path, size = file.size, "开始下载文件");
             fs::create_dir_all(cache_path.parent().unwrap()).await?;
             let tmp_path = cache_path.with_extension(format!("tmp.{}", uuid::Uuid::new_v4()));
@@ -109,7 +110,7 @@ pub async fn sync_model(
                 return Err(e);
             }
 
-            // 4. Verify SHA-256.
+            // 4. 校验 SHA-256。
             let tmp_file = fs::File::open(&tmp_path).await?;
             let hash = hash::sha256_stream(tmp_file).await?;
             if hash != file.sha256 {
@@ -122,7 +123,7 @@ pub async fn sync_model(
                 return Err(CoreError::HashMismatch);
             }
 
-            // 5. Atomically move to target directory.
+            // 5. 原子移动到目标目录。
             fs::create_dir_all(target_path.parent().unwrap()).await?;
             fs::rename(&tmp_path, &target_path).await?;
             info!(path = %file.path, "文件下载并校验成功，已移动到目标目录");
@@ -165,7 +166,7 @@ pub async fn sync_model(
     Ok(report)
 }
 
-/// Verify that a local file exists and its SHA-256 hash matches the expected value.
+/// 验证本地文件是否存在且其 SHA-256 哈希值与预期一致。
 async fn verify_file(path: &std::path::Path, expected: &str) -> std::io::Result<bool> {
     if !path.exists() {
         return Ok(false);
@@ -175,7 +176,7 @@ async fn verify_file(path: &std::path::Path, expected: &str) -> std::io::Result<
     Ok(hash == expected)
 }
 
-/// Download a single file to a temporary path while forwarding progress.
+/// 将单个文件下载到临时路径，同时转发进度信息。
 async fn download_to_tmp(
     client: &reqwest::Client,
     url: &str,
@@ -270,7 +271,7 @@ mod tests {
         let cache_dir = tempfile::tempdir().unwrap();
         let target_dir = tempfile::tempdir().unwrap();
 
-        // Pre-create files in target_dir with correct content.
+        // 预先在 target_dir 中创建正确的文件。
         write_file(target_dir.path(), "test-model/file1.txt", content1).await;
         write_file(target_dir.path(), "test-model/file2.txt", content2).await;
 
@@ -323,7 +324,7 @@ mod tests {
         let cache_dir = tempfile::tempdir().unwrap();
         let target_dir = tempfile::tempdir().unwrap();
 
-        // Pre-create file in cache_dir with correct content.
+        // 预先在 cache_dir 中创建正确的文件。
         write_file(cache_dir.path(), "test-model/model.bin", content).await;
 
         let client = reqwest::Client::new();
@@ -346,11 +347,11 @@ mod tests {
         assert_eq!(report.downloaded_files, 0);
         assert_eq!(report.failed_files, 0);
 
-        // File should be moved to target_dir.
+        // 文件应被移动到 target_dir。
         let target_path = target_dir.path().join("test-model/model.bin");
         assert!(target_path.exists());
 
-        // File should be removed from cache_dir.
+        // 文件应从 cache_dir 中删除。
         let cache_path = cache_dir.path().join("test-model/model.bin");
         assert!(!cache_path.exists());
     }
@@ -409,13 +410,13 @@ mod tests {
         assert_eq!(report.downloaded_files, 0);
         assert_eq!(report.failed_files, 1);
 
-        // Temp file should remain in cache_dir for debugging after hash mismatch.
+        // 哈希不匹配后，临时文件应保留在 cache_dir 中供调试。
         let cache_model_dir = cache_dir.path().join("test-model");
         if cache_model_dir.exists() {
             let entries: Vec<_> = std::fs::read_dir(&cache_model_dir).unwrap().collect();
             assert!(
                 !entries.is_empty(),
-                "temp file should be kept for debugging"
+                "临时文件应保留供调试"
             );
         }
     }

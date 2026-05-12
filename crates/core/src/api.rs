@@ -2,6 +2,7 @@ use crate::{CoreError, FileMeta, Result};
 use reqwest::Client;
 use serde::Deserialize;
 
+/// ModelScope API 返回的单个文件信息。
 #[derive(Deserialize)]
 struct MsFile {
     #[serde(rename = "Path")]
@@ -12,12 +13,14 @@ struct MsFile {
     size: u64,
 }
 
+/// ModelScope API 返回的数据载荷。
 #[derive(Deserialize)]
 struct MsData {
     #[serde(rename = "Files")]
     files: Vec<MsFile>,
 }
 
+/// ModelScope API 的标准响应结构。
 #[derive(Deserialize)]
 struct MsResponse {
     #[serde(rename = "Data")]
@@ -28,21 +31,23 @@ struct MsResponse {
     success: bool,
 }
 
-/// Fetch the list of files and their metadata from the ModelScope API.
+/// 从 ModelScope API 获取仓库文件列表及其元数据。
 ///
 /// # Arguments
-/// * `client` — The HTTP client to use.
-/// * `base_url` — Base URL of the ModelScope instance (e.g. `https://www.modelscope.cn`).
-/// * `model_id` — The model identifier (e.g. `Qwen/Qwen-7B-Chat`).
+///
+/// - `client`: 使用的 HTTP 客户端。
+/// - `base_url`: ModelScope 实例的基础 URL，例如 `https://www.modelscope.cn`。
+/// - `model_id`: 模型标识符，例如 `Qwen/Qwen-7B-Chat`。
+///
+/// # Errors
+///
+/// 返回 [`CoreError`]，可能的错误包括网络请求失败或 API 返回错误响应。
 pub async fn fetch_repo_files(
     client: &Client,
     base_url: &str,
     model_id: &str,
 ) -> Result<Vec<FileMeta>> {
-    let url = format!(
-        "{}/api/v1/models/{}/repo/files?Revision=master",
-        base_url, model_id
-    );
+    let url = format!("{base_url}/api/v1/models/{model_id}/repo/files?Revision=master");
     let resp: MsResponse = client.get(&url).send().await?.json().await?;
     if !resp.success {
         return Err(CoreError::ApiResponseError {

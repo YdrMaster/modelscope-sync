@@ -3,15 +3,15 @@ use modelscope_sync_core::sync;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-/// Create a new synchronization task and spawn it in the background.
+/// 创建新的同步任务并在后台执行。
 ///
-/// Returns the `task_id` immediately so the caller can poll for status.
-/// If a task for the same `model_id` is already running the existing
-/// task ID is returned instead (de-duplication).
+/// 立即返回 `task_id`，以便调用者轮询状态。
+/// 如果同一 `model_id` 的任务已在运行，则返回已有任务 ID（去重）。
 ///
 /// # Arguments
-/// * `model_id` — The model to synchronize.
-/// * `state` — Shared application state.
+///
+/// - `model_id`: 要同步的模型标识符。
+/// - `state`: 共享应用状态。
 pub async fn spawn_sync_task(model_id: String, state: Arc<AppState>) -> String {
     let task_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now();
@@ -46,6 +46,7 @@ pub async fn spawn_sync_task(model_id: String, state: Arc<AppState>) -> String {
     task_id
 }
 
+/// 执行实际的模型同步逻辑并更新任务状态。
 async fn run_sync(model_id: String, task_id: String, state: Arc<AppState>) {
     let start = std::time::Instant::now();
     let mut task = state.tasks.get(&task_id).unwrap().clone();

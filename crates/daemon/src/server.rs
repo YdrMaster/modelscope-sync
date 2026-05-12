@@ -7,15 +7,16 @@ use axum::{
 use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
 
-/// Start the HTTP server and block until a shutdown signal is received.
+/// 启动 HTTP 服务器并在收到关闭信号前保持运行。
 ///
-/// Registers all REST routes and the Prometheus `/metrics` endpoint.
-/// Gracefully shuts down on `Ctrl+C` (all platforms) or `SIGTERM` (Unix).
+/// 注册所有 REST 路由以及 Prometheus `/metrics` 端点。
+/// 在 `Ctrl+C`（所有平台）或 `SIGTERM`（Unix）时优雅关闭。
 ///
 /// # Arguments
-/// * `state` — Shared application state.
-/// * `bind_addr` — TCP address to listen on (e.g. `"0.0.0.0:8080"`).
-/// * `prometheus` — Prometheus metrics exporter handle.
+///
+/// - `state`: 共享应用状态。
+/// - `port`: 监听的 TCP 端口号。
+/// - `prometheus`: Prometheus 指标导出器句柄。
 pub async fn run(state: Arc<AppState>, port: u16, prometheus: PrometheusHandle) {
     let bind_addr = format!("0.0.0.0:{}", port);
     let app = Router::new()

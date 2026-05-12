@@ -4,79 +4,79 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use tokio::sync::{Notify, broadcast};
 
-/// Snapshot of a synchronization task's current state.
+/// 同步任务当前状态的快照。
 #[derive(Debug, Clone)]
 pub struct TaskState {
-    /// Unique identifier for the task (UUID v4).
+    /// 任务唯一标识符（UUID v4）。
     pub task_id: String,
-    /// The model being synchronized.
+    /// 正在同步的模型标识符。
     pub model_id: String,
-    /// Current lifecycle status of the task.
+    /// 任务当前的生命周期状态。
     pub status: TaskStatus,
-    /// Total number of files in the model repository.
+    /// 模型仓库中的文件总数。
     pub total_files: usize,
-    /// Number of files that have been processed so far.
+    /// 到目前为止已处理的文件数。
     pub completed_files: usize,
-    /// Cumulative bytes downloaded across all files.
+    /// 所有文件累计已下载的字节数。
     pub downloaded_bytes: u64,
-    /// Total expected bytes across all files (may be zero until known).
+    /// 所有文件预期总字节数（在获知前可能为零）。
     pub total_bytes: u64,
-    /// Number of files that were already present and valid.
+    /// 已存在且校验通过的文件数。
     pub cached_files: usize,
-    /// Error message if the task failed.
+    /// 任务失败时的错误信息。
     pub error: Option<String>,
-    /// UTC timestamp when the task was created.
+    /// 任务创建时的 UTC 时间戳。
     pub created_at: chrono::DateTime<chrono::Utc>,
-    /// UTC timestamp of the most recent status update.
+    /// 最近状态更新时的 UTC 时间戳。
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Lifecycle status of a synchronization task.
+/// 同步任务的生命周期状态。
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskStatus {
-    /// Task has been accepted but not yet started.
+    /// 任务已接受但尚未开始执行。
     Pending,
-    /// Files are currently being checked or downloaded.
+    /// 文件正在检查或下载中。
     Running,
-    /// All files were processed successfully.
+    /// 所有文件处理成功。
     Success,
-    /// One or more files could not be synchronized.
+    /// 一个或多个文件同步失败。
     Failed,
 }
 
-/// Daemon configuration, populated from CLI arguments or environment variables.
+/// 守护进程配置，从 CLI 参数或环境变量填充。
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// Local directory used as a download staging area.
+    /// 用作下载暂存区的本地目录。
     pub cache_dir: PathBuf,
-    /// Final destination directory for model files.
+    /// 模型文件的最终目标目录。
     pub target_dir: PathBuf,
-    /// Maximum number of files to download concurrently.
+    /// 最大并发下载文件数。
     pub max_concurrent_downloads: usize,
-    /// Base URL of the ModelScope API.
+    /// ModelScope API 的基础 URL。
     pub api_base: String,
-    /// TCP port to listen on.
+    /// 监听的 TCP 端口。
     pub port: u16,
 }
 
-/// Shared application state accessible from all request handlers and background tasks.
+/// 所有请求处理函数和后台任务均可访问的共享应用状态。
 pub struct AppState {
-    /// In-memory map of all known tasks keyed by `task_id`.
+    /// 以 task_id 为键的所有已知任务的内存映射。
     pub tasks: DashMap<String, TaskState>,
-    /// Static configuration for this daemon instance.
+    /// 当前守护进程实例的静态配置。
     pub config: Config,
-    /// Broadcast channel for pushing real-time task updates to SSE subscribers.
+    /// 向 SSE 订阅者推送实时任务更新的广播通道。
     pub broadcast: broadcast::Sender<TaskState>,
-    /// Shared HTTP client for API calls and downloads.
+    /// 用于 API 调用和下载的共享 HTTP 客户端。
     pub reqwest_client: reqwest::Client,
-    /// Number of currently active synchronization tasks.
+    /// 当前活跃的同步任务数量。
     pub active_tasks: Arc<AtomicUsize>,
-    /// Notified when a shutdown signal is received.
+    /// 收到关闭信号时触发通知。
     pub shutdown: Notify,
 }
 
 impl AppState {
-    /// Create a new `AppState` wrapped in an `Arc` for cheap cloning across tasks.
+    /// 创建一个新的 `AppState` 并包装在 `Arc` 中，以便在任务间低成本克隆。
     pub fn new(config: Config) -> Arc<Self> {
         let (broadcast, _) = broadcast::channel(128);
         Arc::new(Self {

@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
 
-/// Compute the local absolute path for a model file.
+/// 计算模型文件的本地绝对路径。
 ///
-/// The returned path follows the pattern `{base_dir}/{model_id}/{file_path}`.
+/// 返回的路径遵循 `{base_dir}/{model_id}/{file_path}` 的格式。
 ///
 /// # Arguments
-/// * `base_dir` — The root directory (e.g. cache directory or target directory).
-/// * `model_id` — The model identifier, which may contain `/` characters.
-/// * `file_path` — The relative path of the file within the model repository.
+///
+/// - `base_dir`: 根目录（例如缓存目录或目标目录）。
+/// - `model_id`: 模型标识符，可能包含 `/` 字符。
+/// - `file_path`: 文件在模型仓库内的相对路径。
 pub fn resolve_path(base_dir: &Path, model_id: &str, file_path: &str) -> PathBuf {
     base_dir.join(model_id).join(file_path)
 }

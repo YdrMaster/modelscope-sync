@@ -1,15 +1,17 @@
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
-/// Compute the SHA-256 hash of a stream asynchronously.
+/// 异步计算数据流的 SHA-256 哈希值。
 ///
-/// Reads the input in 8 KiB chunks to avoid loading large files into memory.
+/// 以 8 KiB 为单位分块读取输入，避免将大文件完整载入内存。
 ///
 /// # Arguments
-/// * `reader` — Any asynchronous reader.
+///
+/// - `reader`: 任意异步读取器。
 ///
 /// # Returns
-/// The lowercase hexadecimal representation of the SHA-256 digest.
+///
+/// SHA-256 摘要的小写十六进制字符串。
 pub async fn sha256_stream<R: AsyncRead + Unpin>(mut reader: R) -> std::io::Result<String> {
     let mut hasher = Sha256::new();
     let mut buf = [0u8; 8192];

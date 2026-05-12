@@ -4,16 +4,16 @@ use reqwest::Client;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc::Sender;
 
-/// Stream-download a file from a URL while reporting progress.
+/// 从指定 URL 流式下载文件并上报进度。
 ///
-/// Data is written chunk-by-chunk to the provided writer. After each chunk the
-/// cumulative number of downloaded bytes is sent through `progress_tx`.
+/// 数据分块写入提供的 writer，每写入一块后通过 `progress_tx` 发送累计已下载的字节数。
 ///
 /// # Arguments
-/// * `client` — The HTTP client.
-/// * `url` — The remote file URL.
-/// * `writer` — An asynchronous writer (e.g. a `tokio::fs::File`).
-/// * `progress_tx` — Channel sender for progress updates (cumulative bytes).
+///
+/// - `client`: HTTP 客户端。
+/// - `url`: 远程文件 URL。
+/// - `writer`: 异步写入器（例如 `tokio::fs::File`）。
+/// - `progress_tx`: 用于发送进度更新（累计字节数）的通道发送端。
 pub async fn stream_download<W: AsyncWrite + Unpin>(
     client: &Client,
     url: &str,
@@ -63,7 +63,7 @@ mod tests {
         .unwrap();
         assert_eq!(writer, body);
 
-        // Verify progress was sent.
+        // 验证进度已被发送。
         let progress = rx.recv().await;
         assert!(progress.is_some());
         assert_eq!(progress.unwrap(), body.len() as u64);

@@ -1,22 +1,34 @@
+//! ModelScope 同步守护进程的可执行入口。
+//!
+//! 解析命令行参数、初始化日志与指标、启动 HTTP 服务器并等待优雅关闭。
+
+#![deny(missing_docs)]
+
 use clap::Parser;
 use modelscope_sync_daemon::state::{AppState, Config};
 use std::path::PathBuf;
 
+/// 命令行参数。
 #[derive(Parser, Debug)]
 #[command(name = "modelscope-sync-daemon")]
 struct Args {
+    /// 本地缓存目录。
     #[arg(long, default_value = "/var/cache/modelscope")]
     cache_dir: PathBuf,
 
+    /// 模型文件的目标目录。
     #[arg(long, default_value = "/mnt/models")]
     target_dir: PathBuf,
 
+    /// 最大并发下载数。
     #[arg(long, default_value = "3")]
     max_concurrent_downloads: usize,
 
+    /// ModelScope API 的基础 URL。
     #[arg(long, default_value = "https://www.modelscope.cn")]
     api_base: String,
 
+    /// HTTP 服务监听端口。
     #[arg(long, default_value = "8080")]
     port: u16,
 }
@@ -85,7 +97,7 @@ async fn main() {
         _ = shutdown => {},
     }
 
-    // Wait for active background tasks to complete (up to 30s).
+    // 等待活跃的后台任务完成（最多 30 秒）。
     let timeout = std::time::Duration::from_secs(30);
     let start = std::time::Instant::now();
     while state

@@ -2,13 +2,13 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
-/// Errors returned by the HTTP API layer.
+/// HTTP API 层返回的错误。
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
-    /// The requested task does not exist.
+    /// 请求的任务不存在。
     #[error("task not found")]
     TaskNotFound,
-    /// An unexpected internal error occurred.
+    /// 发生了意外的内部错误。
     #[error("internal error: {0}")]
     Internal(String),
 }
