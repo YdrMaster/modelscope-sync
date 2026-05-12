@@ -1,6 +1,6 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use modelscope_sync_daemon::state::{AppState, Config};
+use modelscope_sync_server::state::{AppState, Config};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -10,8 +10,6 @@ fn test_state() -> Arc<AppState> {
         cache_dir: PathBuf::from("/tmp/test-cache"),
         target_dir: PathBuf::from("/tmp/test-target"),
         max_concurrent_downloads: 3,
-        api_base: "https://test.modelscope.cn".to_string(),
-        port: 0,
     };
     AppState::new(config)
 }
@@ -22,7 +20,7 @@ async fn test_health_endpoint() {
     let app = axum::Router::new()
         .route(
             "/health",
-            axum::routing::get(modelscope_sync_daemon::handlers::health),
+            axum::routing::get(modelscope_sync_server::handlers::health),
         )
         .with_state(state);
 
@@ -45,7 +43,7 @@ async fn test_ready_endpoint() {
     let app = axum::Router::new()
         .route(
             "/ready",
-            axum::routing::get(modelscope_sync_daemon::handlers::ready),
+            axum::routing::get(modelscope_sync_server::handlers::ready),
         )
         .with_state(state);
 
@@ -72,7 +70,7 @@ async fn test_sync_endpoint_returns_202() {
     let app = axum::Router::new()
         .route(
             "/sync",
-            axum::routing::post(modelscope_sync_daemon::handlers::post_sync),
+            axum::routing::post(modelscope_sync_server::handlers::post_sync),
         )
         .with_state(state);
 

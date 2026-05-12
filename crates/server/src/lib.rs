@@ -1,4 +1,4 @@
-//! ModelScope 同步守护进程的 HTTP API 与后台任务管理。
+//! ModelScope 同步服务的 HTTP API 与后台任务管理。
 //!
 //! 提供 REST API、任务调度、状态管理和 Prometheus 指标导出。
 

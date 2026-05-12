@@ -1,64 +1,18 @@
-//! ModelScope 同步守护进程的可执行入口。
-//!
-//! 解析命令行参数、初始化日志与指标、启动 HTTP 服务器并等待优雅关闭。
+use modelscope_sync_server::state::{AppState, Config};
+use tracing::info;
 
-#![deny(missing_docs)]
-
-use clap::Parser;
-use modelscope_sync_daemon::state::{AppState, Config};
-use std::path::PathBuf;
-
-/// 命令行参数。
-#[derive(Parser, Debug)]
-#[command(name = "modelscope-sync-daemon")]
-struct Args {
-    /// 本地缓存目录。
-    #[arg(long, default_value = "/var/cache/modelscope")]
-    cache_dir: PathBuf,
-
-    /// 模型文件的目标目录。
-    #[arg(long, default_value = "/mnt/models")]
-    target_dir: PathBuf,
-
-    /// 最大并发下载数。
-    #[arg(long, default_value = "3")]
-    max_concurrent_downloads: usize,
-
-    /// ModelScope API 的基础 URL。
-    #[arg(long, default_value = "https://www.modelscope.cn")]
-    api_base: String,
-
-    /// HTTP 服务监听端口。
-    #[arg(long, default_value = "8080")]
-    port: u16,
-}
-
-#[tokio::main]
-async fn main() {
-    let args = Args::parse();
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-    tracing_subscriber::fmt().with_env_filter(env_filter).init();
-    tracing::info!("daemon starting with args: {:?}", args);
-
+/// 启动 HTTP 服务。
+pub async fn run(config: Config, port: u16) {
     let recorder = metrics_exporter_prometheus::PrometheusBuilder::new().build_recorder();
     let prometheus = recorder.handle();
     metrics::set_global_recorder(recorder).unwrap();
-
-    let config = Config {
-        cache_dir: args.cache_dir,
-        target_dir: args.target_dir,
-        max_concurrent_downloads: args.max_concurrent_downloads,
-        api_base: args.api_base,
-        port: args.port,
-    };
 
     let state = AppState::new(config);
 
     let server_handle = {
         let state = state.clone();
         tokio::spawn(async move {
-            modelscope_sync_daemon::server::run(state, args.port, prometheus).await;
+            modelscope_sync_server::server::run(state, port, prometheus).await;
         })
     };
 
@@ -87,7 +41,7 @@ async fn main() {
                 _ = terminate => {},
             }
 
-            tracing::info!("shutdown signal received, starting graceful shutdown");
+            info!("shutdown signal received, starting graceful shutdown");
             state.shutdown.notify_waiters();
         }
     };
@@ -117,5 +71,5 @@ async fn main() {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
-    tracing::info!("daemon shutdown complete");
+    info!("shutdown complete");
 }

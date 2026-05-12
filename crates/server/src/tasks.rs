@@ -78,7 +78,7 @@ async fn run_sync(model_id: String, task_id: String, state: Arc<AppState>) {
 
     let result = sync::sync_model(
         &state.reqwest_client,
-        &state.config.api_base,
+        "https://www.modelscope.cn",
         &model_id,
         &state.config.cache_dir,
         &state.config.target_dir,

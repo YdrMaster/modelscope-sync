@@ -1,6 +1,6 @@
 # ModelScope Sync
 
-ModelScope Sync 是一个常驻的模型分发服务，自动将 ModelScope 上的模型仓库同步到本地目标目录，支持双目录（缓存 + 目标）增量校验、并发下载和 Prometheus 可观测性。
+ModelScope Sync 是一个模型分发服务，自动将 ModelScope 上的模型仓库同步到本地目标目录，支持双目录（缓存 + 目标）增量校验、并发下载和 Prometheus 可观测性。
 
 ## 功能特性
 
@@ -8,47 +8,60 @@ ModelScope Sync 是一个常驻的模型分发服务，自动将 ModelScope 上�
 - **双目录设计**：缓存目录作为下载暂存区，目标目录为最终存储位置，支持命中缓存时直接移动
 - **SHA256 增量校验**：本地文件哈希匹配时跳过下载，仅下载变更部分
 - **并发下载**：可配置的最大并发数，避免带宽和磁盘过载
+- **直接同步模式**：命令行直接指定模型 ID，同步完成后退出，无需启动 HTTP 服务
 - **异步任务模式**：HTTP API 提交任务后异步执行，支持 SSE 实时进度推送
-- **云原生可观测性**：内置 `/health`、 `/ready` 探针和 Prometheus `/metrics` 端点
+- **云原生可观测性**：内置 `/health`、`/ready` 探针和 Prometheus `/metrics` 端点
 - **优雅关闭**：监听 SIGTERM 信号，完成当前 HTTP 请求后安全退出
 
 ## 快速开始
 
 ### 构建
 
-```bash
-cargo build --release -p modelscope-sync-daemon
+```shell
+cargo build --release
 ```
 
-### 启动服务
+### 启动 HTTP 服务
 
-```bash
-./target/release/modelscope-sync-daemon \
-  --cache-dir cache \
-  --target-dir models \
-  --max-concurrent-downloads 3 \
-  --port 8080
+```shell
+cargo run --release -- serve -p 8080 -c cache -t models
 ```
 
-或使用环境变量：
+### 直接同步指定模型并退出
 
-```bash
-CACHE_DIR=/var/cache/modelscope \
-TARGET_DIR=/mnt/models \
-MAX_CONCURRENT_DOWNLOADS=3 \
-PORT=8080 \
-./target/release/modelscope-sync-daemon
+```shell
+cargo run --release -- sync -m Qwen/Qwen-7B-Chat -c cache -t models
 ```
 
 ## 命令行参数
 
-| 参数 | 环境变量 | 默认值 | 说明 |
-| ------ | --------- | -------- | ------ |
-| `--cache-dir` | `CACHE_DIR` | `/var/cache/modelscope` | 下载缓存目录（暂存区） |
-| `--target-dir` | `TARGET_DIR` | `/mnt/models` | 目标存储目录 |
-| `--max-concurrent-downloads` | `MAX_CONCURRENT_DOWNLOADS` | `3` | 最大并发下载文件数 |
-| `--api-base` | `API_BASE` | `https://www.modelscope.cn` | ModelScope API 地址 |
-| `--port` | `PORT` | `8080` | HTTP 服务监听端口 |
+### 公共参数
+
+| 参数 | 短选项 | 默认值 | 说明 |
+| ---- | ------ | ------ | ---- |
+| `--cache-dir` | `-c` | 无 | 下载缓存目录（暂存区） |
+| `--target-dir` | `-t` | 无 | 目标存储目录 |
+| `--max-concurrent-downloads` | `-j` | `3` | 最大并发下载文件数 |
+
+### serve 子命令
+
+启动 HTTP 服务，提供 REST API 和 Prometheus 指标：
+
+```shell
+modelscope-sync serve [公共参数] [-p <port>]
+```
+
+| 参数 | 短选项 | 默认值 | 说明 |
+| ---- | ------ | ------ | ---- |
+| `--port` | `-p` | `8080` | HTTP 服务监听端口 |
+
+### sync 子命令
+
+```shell
+modelscope-sync sync -m <model_id> [公共参数]
+```
+
+直接同步指定模型，完成后退出。若有文件同步失败，进程返回非零退出码。
 
 ## HTTP API
 
@@ -61,17 +74,13 @@ POST /sync
 请求体：
 
 ```json
-{
-  "model_id": "Qwen/Qwen-7B-Chat"
-}
+{"model_id": "Qwen/Qwen-7B-Chat"}
 ```
 
 响应（202 Accepted）：
 
 ```json
-{
-  "task_id": "550e8400-e29b-41d4-a716-446655440000"
-}
+{"task_id": "550e8400-e29b-41d4-a716-446655440000"}
 ```
 
 若同一 `model_id` 已有任务在运行，直接返回该任务的 `task_id`。
@@ -146,7 +155,7 @@ GET /metrics
 暴露 Prometheus 格式的指标，包括：
 
 | 指标名 | 类型 | 说明 |
-| -------- | ------ | ------ |
+| ------ | ---- | ---- |
 | `modelscope_sync_tasks_total` | Counter | 已完成的任务总数（按 `status` 标签分类） |
 
 ## 文件同步策略

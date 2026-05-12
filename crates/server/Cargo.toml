@@ -1,10 +1,10 @@
 [package]
-name = "modelscope-sync-daemon"
+name = "modelscope-sync-server"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-modelscope-sync-core = { path = "../core" }
+modelscope-sync-core.path = "../core"
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1.52", features = [
     "rt-multi-thread",
@@ -16,18 +16,13 @@ dashmap = "6.1"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio-stream = { version = "0.1", features = ["sync"] }
 uuid = { version = "1.23", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
-clap = { version = "4.6", features = ["derive"] }
-reqwest = { version = "0.13", default-features = false, features = [
-    "rustls",
-] }
-futures = "0.3"
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

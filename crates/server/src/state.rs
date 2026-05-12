@@ -53,10 +53,6 @@ pub struct Config {
     pub target_dir: PathBuf,
     /// 最大并发下载文件数。
     pub max_concurrent_downloads: usize,
-    /// ModelScope API 的基础 URL。
-    pub api_base: String,
-    /// 监听的 TCP 端口。
-    pub port: u16,
 }
 
 /// 所有请求处理函数和后台任务均可访问的共享应用状态。
