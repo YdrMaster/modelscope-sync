@@ -1,6 +1,6 @@
 //! 与 ModelScope 模型仓库同步相关的核心逻辑。
 //!
-//! 提供文件元数据获取、本地缓存管理、流式下载、SHA-256 校验以及完整的模型同步流程。
+//! 提供文件元数据获取、流式下载、SHA-256 校验以及完整的模型同步流程。
 
 #![deny(missing_docs)]
 
@@ -10,11 +10,11 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Deserialize)]
 pub struct FileMeta {
     /// 文件在仓库内的相对路径。
-    pub path: String,
+    path: String,
     /// 文件内容的预期 SHA-256 哈希值。
-    pub sha256: String,
+    sha256: String,
     /// 文件大小，单位为字节。
-    pub size: u64,
+    size: u64,
 }
 
 /// 核心同步逻辑中可能发生的错误。
@@ -53,13 +53,8 @@ pub struct SyncReport {
     pub failed_files: usize,
 }
 
-/// 与 ModelScope API 交互的模块。
-pub mod api;
-/// 本地缓存路径解析相关的模块。
-pub mod cache;
-/// 流式下载相关的模块。
-pub mod download;
-/// SHA-256 哈希计算相关的模块。
-pub mod hash;
+mod api;
+mod download;
+mod hash;
 /// 模型同步主流程相关的模块。
 pub mod sync;

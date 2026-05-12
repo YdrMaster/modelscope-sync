@@ -1,5 +1,5 @@
-use crate::{CoreError, Result, SyncReport, api, cache, download, hash};
-use std::path::Path;
+use crate::{CoreError, Result, SyncReport, api, download, hash};
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::sync::mpsc::Sender;
 use tracing::{error, info};
@@ -40,9 +40,9 @@ pub async fn sync_model(
     max_concurrent: usize,
     progress_tx: Sender<(String, u64, u64)>,
 ) -> Result<SyncReport> {
-    info!(model_id, "开始同步模型");
+    info!(model_id, "starting model sync");
     let files = api::fetch_repo_files(client, api_base, model_id).await?;
-    info!(model_id, file_count = files.len(), "获取到文件列表");
+    info!(model_id, file_count = files.len(), "fetched file list");
 
     let mut report = SyncReport {
         total_files: files.len(),
@@ -52,7 +52,7 @@ pub async fn sync_model(
     };
 
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrent));
-    let mut handles = vec![];
+    let mut tasks = tokio::task::JoinSet::new();
 
     for file in &files {
         let permit = semaphore.clone().acquire_owned().await.unwrap();
@@ -64,14 +64,14 @@ pub async fn sync_model(
         let api_base = api_base.to_string();
         let file = file.clone();
 
-        let handle = tokio::spawn(async move {
+        tasks.spawn(async move {
             let _permit = permit;
-            let target_path = cache::resolve_path(&target_dir, &model_id, &file.path);
-            let cache_path = cache::resolve_path(&cache_dir, &model_id, &file.path);
+            let target_path = resolve_path(&target_dir, &model_id, &file.path);
+            let cache_path = resolve_path(&cache_dir, &model_id, &file.path);
 
             // 1. 检查目标目录。
             if let Ok(true) = verify_file(&target_path, &file.sha256).await {
-                info!(path = %file.path, "目标目录命中，跳过下载");
+                info!(path = %file.path, "target hit, skipping download");
                 if cache_path.exists() {
                     let _ = fs::remove_file(&cache_path).await;
                 }
@@ -80,20 +80,20 @@ pub async fn sync_model(
 
             // 2. 检查缓存目录。
             if let Ok(true) = verify_file(&cache_path, &file.sha256).await {
-                info!(path = %file.path, "缓存目录命中，移动到目标目录");
+                info!(path = %file.path, "cache hit, moving to target directory");
                 fs::create_dir_all(target_path.parent().unwrap()).await?;
                 fs::rename(&cache_path, &target_path).await?;
                 return Ok((file.path, true, false));
             }
 
             // 3. 下载到缓存目录。
-            info!(path = %file.path, size = file.size, "开始下载文件");
+            info!(path = %file.path, size = file.size, "starting file download");
             fs::create_dir_all(cache_path.parent().unwrap()).await?;
             let tmp_path = cache_path.with_extension(format!("tmp.{}", uuid::Uuid::new_v4()));
 
             let url = format!(
-                "{}/api/v1/models/{}/repo?Revision=master&FilePath={}",
-                api_base, model_id, file.path
+                "{api_base}/api/v1/models/{model_id}/repo?Revision=master&FilePath={}",
+                file.path
             );
             if let Err(e) = download_to_tmp(
                 &client,
@@ -105,7 +105,7 @@ pub async fn sync_model(
             )
             .await
             {
-                error!(path = %file.path, error = %e, "下载失败");
+                error!(path = %file.path, error = %e, "download failed");
                 let _ = fs::remove_file(&tmp_path).await;
                 return Err(e);
             }
@@ -118,7 +118,7 @@ pub async fn sync_model(
                     path = %file.path,
                     expected = %file.sha256,
                     actual = %hash,
-                    "SHA-256 校验失败，保留临时文件供调试"
+                    "SHA-256 verification failed, keeping temp file for debugging"
                 );
                 return Err(CoreError::HashMismatch);
             }
@@ -126,16 +126,14 @@ pub async fn sync_model(
             // 5. 原子移动到目标目录。
             fs::create_dir_all(target_path.parent().unwrap()).await?;
             fs::rename(&tmp_path, &target_path).await?;
-            info!(path = %file.path, "文件下载并校验成功，已移动到目标目录");
+            info!(path = %file.path, "file downloaded and verified, moved to target directory");
 
             Ok((file.path, false, true))
         });
-
-        handles.push(handle);
     }
 
-    for handle in handles {
-        match handle.await {
+    while let Some(res) = tasks.join_next().await {
+        match res {
             Ok(Ok((_path, cached, downloaded))) => {
                 if cached {
                     report.cached_files += 1;
@@ -145,11 +143,11 @@ pub async fn sync_model(
                 }
             }
             Ok(Err(e)) => {
-                error!(error = %e, "文件同步失败");
+                error!(error = %e, "file sync failed");
                 report.failed_files += 1;
             }
             Err(e) => {
-                error!(error = %e, "同步任务 panic");
+                error!(error = %e, "sync task panicked");
                 report.failed_files += 1;
             }
         }
@@ -160,7 +158,7 @@ pub async fn sync_model(
         cached = report.cached_files,
         downloaded = report.downloaded_files,
         failed = report.failed_files,
-        "同步完成"
+        "sync completed"
     );
 
     Ok(report)
@@ -210,13 +208,19 @@ async fn download_to_tmp(
         Ok(r) => r,
         Err(e) => {
             return Err(CoreError::Io(std::io::Error::other(format!(
-                "download task panicked: {}",
-                e
+                "download task panicked: {e}"
             ))));
         }
     };
     drop(progress_forward);
     result
+}
+
+/// 计算模型文件的本地绝对路径。
+///
+/// 返回的路径遵循 `{base_dir}/{model_id}/{file_path}` 的格式。
+fn resolve_path(base_dir: &Path, model_id: &str, file_path: &str) -> PathBuf {
+    base_dir.join(model_id).join(file_path)
 }
 
 #[cfg(test)]
@@ -416,7 +420,7 @@ mod tests {
             let entries: Vec<_> = std::fs::read_dir(&cache_model_dir).unwrap().collect();
             assert!(
                 !entries.is_empty(),
-                "临时文件应保留供调试"
+                "temp file should be kept for debugging"
             );
         }
     }
