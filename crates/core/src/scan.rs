@@ -1,4 +1,4 @@
-use crate::{CoreError, Result, api, hash, sync};
+use crate::{CoreError, Result, api, sync};
 use std::path::Path;
 use tokio::fs;
 
@@ -30,9 +30,8 @@ pub async fn scan_and_organize(
                 model_id = %model_id,
                 total = report.total_files,
                 moved = report.moved_files,
-                deleted = report.deleted_files,
                 verified = report.verified_files,
-                corrupt = report.corrupt_files,
+                deleted = report.deleted_files,
                 "model scan completed"
             ),
             Err(e) => error!(model_id = %model_id, error = %e, "model scan failed"),
@@ -161,23 +160,16 @@ struct ScanReport {
     total_files: usize,
     /// 验证成功并从缓存移动到目标目录的文件数。
     moved_files: usize,
-    /// 验证失败并从缓存删除的文件数。
-    deleted_files: usize,
     /// 目标目录中已验证通过并保留的文件数。
     verified_files: usize,
-    /// 目标目录中验证失败并被删除的文件数。
-    corrupt_files: usize,
+    /// 验证失败并被删除的文件数（无论来自缓存还是目标目录）。
+    deleted_files: usize,
 }
 
-/// 处理单个模型：验证缓存文件并整理。
+/// 处理单个模型：验证并整理本地文件。
 ///
-/// 对每个文件按以下顺序处理：
-/// 1. 若文件存在于缓存，验证 hash：
-///    - 正确则原子移动到目标目录；
-///    - 错误则从缓存删除，并继续检查目标目录中的同名文件。
-/// 2. 若缓存中不存在（或已删除），检查目标目录：
-///    - 存在且 hash 正确则保留；
-///    - 存在但 hash 错误则删除。
+/// 对每个文件调用 [`crate::verify_and_organize`]，统计处理结果。
+/// 文件不存在时直接跳过（不下载）。
 async fn process_model(
     client: &reqwest::Client,
     cache_dir: &Path,
@@ -189,76 +181,37 @@ async fn process_model(
     let mut report = ScanReport {
         total_files: files.len(),
         moved_files: 0,
-        deleted_files: 0,
         verified_files: 0,
-        corrupt_files: 0,
+        deleted_files: 0,
     };
 
     for file_meta in &files {
         let cache_path = sync::resolve_path(cache_dir, model_id, &file_meta.path);
         let target_path = sync::resolve_path(target_dir, model_id, &file_meta.path);
 
-        // 1. 处理缓存中的文件。
-        let mut cache_handled = false;
-        if cache_path.exists() {
-            cache_handled = true;
-            match verify_file_hash(&cache_path, &file_meta.sha256).await {
-                Ok(true) => {
-                    if let Some(parent) = target_path.parent() {
-                        fs::create_dir_all(parent).await?;
-                    }
-                    fs::rename(&cache_path, &target_path).await?;
-                    report.moved_files += 1;
-                    info!(path = %file_meta.path, "verified and moved to target");
-                    continue;
-                }
-                Ok(false) => {
-                    let _ = fs::remove_file(&cache_path).await;
-                    report.deleted_files += 1;
-                    warn!(
-                        path = %file_meta.path,
-                        expected = %file_meta.sha256,
-                        "hash mismatch, deleted from cache"
-                    );
-                }
-                Err(e) => {
-                    error!(path = %file_meta.path, error = %e, "failed to verify cache file");
-                }
+        match crate::verify_and_organize(&cache_path, &target_path, &file_meta.sha256, true).await?
+        {
+            crate::FileStatus::Verified => {
+                report.verified_files += 1;
+                info!(path = %file_meta.path, "verified in target");
             }
-        }
-
-        // 2. 处理目标目录中的文件（缓存中不存在或验证失败时）。
-        if target_path.exists() {
-            match verify_file_hash(&target_path, &file_meta.sha256).await {
-                Ok(true) => {
-                    report.verified_files += 1;
-                    info!(path = %file_meta.path, "verified in target");
-                }
-                Ok(false) => {
-                    let _ = fs::remove_file(&target_path).await;
-                    report.corrupt_files += 1;
-                    warn!(
-                        path = %file_meta.path,
-                        expected = %file_meta.sha256,
-                        "hash mismatch, deleted from target"
-                    );
-                }
-                Err(e) => {
-                    error!(path = %file_meta.path, error = %e, "failed to verify target file");
-                }
+            crate::FileStatus::Moved => {
+                report.moved_files += 1;
+                info!(path = %file_meta.path, "verified and moved to target");
             }
-        } else if !cache_handled {
-            // 文件既不在缓存也不在目标目录，无需处理。
-            info!(path = %file_meta.path, "file not present in cache or target");
+            crate::FileStatus::Deleted => {
+                report.deleted_files += 1;
+                warn!(
+                    path = %file_meta.path,
+                    expected = %file_meta.sha256,
+                    "hash mismatch, deleted"
+                );
+            }
+            crate::FileStatus::Missing => {
+                info!(path = %file_meta.path, "file not present in cache or target");
+            }
         }
     }
 
     Ok(report)
-}
-
-/// 验证单个文件的 SHA-256 哈希值。
-async fn verify_file_hash(path: &Path, expected: &str) -> Result<bool> {
-    let file = fs::File::open(path).await?;
-    let actual = hash::sha256_stream(file).await?;
-    Ok(actual == expected)
 }

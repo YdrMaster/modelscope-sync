@@ -68,24 +68,21 @@ pub async fn sync_model(
             let target_path = resolve_path(&target_dir, &model_id, &file.path);
             let cache_path = resolve_path(&cache_dir, &model_id, &file.path);
 
-            // 1. 检查目标目录。
-            if let Ok(true) = verify_file(&target_path, &file.sha256).await {
-                info!(path = %file.path, "target hit, skipping download");
-                if cache_path.exists() {
-                    let _ = fs::remove_file(&cache_path).await;
+            // 1. 检查本地已有文件。
+            match crate::verify_and_organize(&cache_path, &target_path, &file.sha256, false).await?
+            {
+                crate::FileStatus::Verified => {
+                    info!(path = %file.path, "target hit, skipping download");
+                    return Ok((file.path, true, false));
                 }
-                return Ok((file.path, true, false));
+                crate::FileStatus::Moved => {
+                    info!(path = %file.path, "cache hit, moving to target directory");
+                    return Ok((file.path, true, false));
+                }
+                _ => {}
             }
 
-            // 2. 检查缓存目录。
-            if let Ok(true) = verify_file(&cache_path, &file.sha256).await {
-                info!(path = %file.path, "cache hit, moving to target directory");
-                fs::create_dir_all(target_path.parent().unwrap()).await?;
-                fs::rename(&cache_path, &target_path).await?;
-                return Ok((file.path, true, false));
-            }
-
-            // 3. 下载到缓存目录。
+            // 2. 下载到缓存目录。
             info!(path = %file.path, size = file.size, "starting file download");
             fs::create_dir_all(cache_path.parent().unwrap()).await?;
             let tmp_path = cache_path.with_extension(format!("tmp.{}", uuid::Uuid::new_v4()));
@@ -109,7 +106,7 @@ pub async fn sync_model(
                 return Err(e);
             }
 
-            // 4. 校验 SHA-256。
+            // 3. 校验 SHA-256。
             let tmp_file = fs::File::open(&tmp_path).await?;
             let hash = hash::sha256_stream(tmp_file).await?;
             if hash != file.sha256 {
@@ -122,9 +119,8 @@ pub async fn sync_model(
                 return Err(CoreError::HashMismatch);
             }
 
-            // 5. 原子移动到目标目录。
-            fs::create_dir_all(target_path.parent().unwrap()).await?;
-            fs::rename(&tmp_path, &target_path).await?;
+            // 4. 原子移动到目标目录。
+            crate::atomic_move(&tmp_path, &target_path).await?;
             info!(path = %file.path, "file downloaded and verified, moved to target directory");
 
             Ok((file.path, false, true))
@@ -161,16 +157,6 @@ pub async fn sync_model(
     );
 
     Ok(report)
-}
-
-/// 验证本地文件是否存在且其 SHA-256 哈希值与预期一致。
-async fn verify_file(path: &std::path::Path, expected: &str) -> std::io::Result<bool> {
-    if !path.exists() {
-        return Ok(false);
-    }
-    let file = fs::File::open(path).await?;
-    let hash = hash::sha256_stream(file).await?;
-    Ok(hash == expected)
 }
 
 /// 将单个文件下载到临时路径，同时转发进度信息。
