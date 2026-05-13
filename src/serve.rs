@@ -1,4 +1,5 @@
 use crate::CommonArgs;
+use modelscope_sync_core::scan;
 use modelscope_sync_server::state::{AppState, Config};
 use tracing::info;
 
@@ -16,9 +17,20 @@ impl ServeArgs {
     pub async fn run(self) {
         let Self { common, port } = self;
         let config = Config {
-            cache_dir: common.cache_dir,
-            target_dir: common.target_dir,
+            cache_dir: common.cache_dir.clone(),
+            target_dir: common.target_dir.clone(),
             max_concurrent_downloads: common.max_concurrent_downloads,
+        };
+
+        let client = reqwest::Client::new();
+        let _scan_handle = {
+            let cache_dir = common.cache_dir;
+            let target_dir = common.target_dir;
+            tokio::spawn(async move {
+                if let Err(e) = scan::scan_and_organize(&client, &cache_dir, &target_dir).await {
+                    tracing::error!(error = %e, "background scan failed")
+                }
+            })
         };
 
         let recorder = metrics_exporter_prometheus::PrometheusBuilder::new().build_recorder();

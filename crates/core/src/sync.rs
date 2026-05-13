@@ -2,7 +2,6 @@ use crate::{CoreError, Result, SyncReport, api, download, hash};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::sync::mpsc::Sender;
-use tracing::{error, info};
 
 /// 将完整的模型仓库从 ModelScope 同步到本地文件系统。
 ///
@@ -219,7 +218,7 @@ async fn download_to_tmp(
 /// 计算模型文件的本地绝对路径。
 ///
 /// 返回的路径遵循 `{base_dir}/{model_id}/{file_path}` 的格式。
-fn resolve_path(base_dir: &Path, model_id: &str, file_path: &str) -> PathBuf {
+pub(crate) fn resolve_path(base_dir: &Path, model_id: &str, file_path: &str) -> PathBuf {
     base_dir.join(model_id).join(file_path)
 }
 

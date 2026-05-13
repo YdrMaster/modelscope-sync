@@ -4,6 +4,9 @@
 
 #![deny(missing_docs)]
 
+#[macro_use]
+extern crate tracing;
+
 use serde::Deserialize;
 
 /// 模型仓库中单个文件的元数据。
@@ -56,5 +59,7 @@ pub struct SyncReport {
 mod api;
 mod download;
 mod hash;
+/// 缓存目录扫描与整理相关的模块。
+pub mod scan;
 /// 模型同步主流程相关的模块。
 pub mod sync;

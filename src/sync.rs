@@ -1,4 +1,5 @@
 use crate::CommonArgs;
+use modelscope_sync_core::sync;
 use tracing::{error, info};
 
 #[derive(clap::Args, Debug)]
@@ -28,7 +29,7 @@ impl SyncArgs {
 
         tokio::spawn(async move { while progress_rx.recv().await.is_some() {} });
 
-        let result = modelscope_sync_core::sync::sync_model(
+        let result = sync::sync_model(
             &client,
             "https://www.modelscope.cn",
             &model_id,
