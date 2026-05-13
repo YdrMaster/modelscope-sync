@@ -39,8 +39,8 @@ cargo run --release -- sync -m Qwen/Qwen-7B-Chat -c cache -t models
 
 | 参数 | 短选项 | 默认值 | 说明 |
 | ---- | ------ | ------ | ---- |
-| `--cache-dir` | `-c` | 无 | 下载缓存目录（暂存区） |
-| `--target-dir` | `-t` | 无 | 目标存储目录 |
+| `--cache-dir` | `-c` | `cache` | 下载缓存目录（暂存区） |
+| `--target-dir` | `-t` | `models` | 目标存储目录 |
 | `--max-concurrent-downloads` | `-j` | `3` | 最大并发下载文件数 |
 
 ### serve 子命令
@@ -58,7 +58,7 @@ modelscope-sync serve [公共参数] [-p <port>]
 ### sync 子命令
 
 ```shell
-modelscope-sync sync -m <model_id> [公共参数]
+modelscope-sync sync [公共参数] -m <model_id>
 ```
 
 直接同步指定模型，完成后退出。若有文件同步失败，进程返回非零退出码。
