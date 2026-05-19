@@ -1,3 +1,7 @@
+//! 直接同步子命令的实现。
+//!
+//! 解析 `sync` 子命令参数，执行单次模型同步并输出结果报告。
+
 use crate::CommonArgs;
 use modelscope_sync_core::sync;
 use tracing::{error, info};
@@ -27,6 +31,7 @@ impl SyncArgs {
             .unwrap();
         let (progress_tx, mut progress_rx) = tokio::sync::mpsc::channel(128);
 
+        // 启动一个虚拟的进度接收任务，避免发送端因通道满而阻塞。
         tokio::spawn(async move { while progress_rx.recv().await.is_some() {} });
 
         let result = sync::sync_model(

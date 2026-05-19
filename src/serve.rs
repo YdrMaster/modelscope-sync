@@ -1,3 +1,8 @@
+//! HTTP 服务子命令的实现。
+//!
+//! 解析 `serve` 子命令参数，启动后台缓存扫描、Prometheus 指标导出和 Axum HTTP 服务器，
+//! 并处理优雅关闭逻辑。
+
 use crate::CommonArgs;
 use modelscope_sync_core::scan;
 use modelscope_sync_server::state::{AppState, Config};
@@ -23,6 +28,7 @@ impl ServeArgs {
         };
 
         let client = reqwest::Client::new();
+        // 启动后台缓存扫描任务，无需等待其完成。
         let _scan_handle = {
             let cache_dir = common.cache_dir;
             let target_dir = common.target_dir;
@@ -46,6 +52,7 @@ impl ServeArgs {
             })
         };
 
+        // 注册系统信号处理器，在收到 Ctrl+C 或 SIGTERM 时触发优雅关闭。
         let shutdown = {
             let state = state.clone();
             async move {

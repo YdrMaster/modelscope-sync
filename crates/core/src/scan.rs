@@ -148,6 +148,7 @@ async fn collect_candidates(
     }
 
     for sub_dir in sub_dirs {
+        // 递归调用需要使用 Box::pin，因为 async fn 的递归调用在编译期无法确定大小。
         Box::pin(collect_candidates(&sub_dir, base_dir, candidates, visited)).await?;
     }
 

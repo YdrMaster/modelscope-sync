@@ -53,6 +53,7 @@ pub struct TaskResponse {
     pub updated_at: String,
 }
 
+/// 将内部 [`TaskState`] 转换为对外暴露的 [`TaskResponse`]。
 impl From<TaskState> for TaskResponse {
     fn from(t: TaskState) -> Self {
         Self {
@@ -118,6 +119,7 @@ pub async fn get_task_events(
     impl tokio_stream::Stream<Item = Result<axum::response::sse::Event, broadcast::error::RecvError>>,
 > {
     let rx = state.broadcast.subscribe();
+    // 只将当前 task_id 对应的事件转换为 SSE 事件，其余消息丢弃。
     let filtered = BroadcastStream::new(rx).filter_map(move |result| match result {
         Ok(task) if task.task_id == task_id => {
             let event = axum::response::sse::Event::default()

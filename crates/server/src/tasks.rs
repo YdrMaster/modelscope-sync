@@ -47,6 +47,8 @@ pub async fn spawn_sync_task(model_id: String, state: Arc<AppState>) -> String {
 }
 
 /// 执行实际的模型同步逻辑并更新任务状态。
+///
+/// 创建独立的进度聚合任务，在同步完成后根据结果更新任务状态、记录指标并广播通知。
 async fn run_sync(model_id: String, task_id: String, state: Arc<AppState>) {
     let start = std::time::Instant::now();
     let mut task = state.tasks.get(&task_id).unwrap().clone();
@@ -69,6 +71,7 @@ async fn run_sync(model_id: String, task_id: String, state: Arc<AppState>) {
                     }
                     t.updated_at = chrono::Utc::now();
                     let updated = t.clone();
+                    // 显式释放 DashMap 的写锁，避免在广播时持有锁。
                     drop(t);
                     let _ = state.broadcast.send(updated);
                 }
