@@ -160,6 +160,8 @@ pub async fn sync_model(
 }
 
 /// 将单个文件下载到临时路径，同时转发进度信息。
+///
+/// 内部会为超过 1 GiB 的大文件启动定时日志任务，每分钟输出一次下载进度。
 async fn download_to_tmp(
     client: &reqwest::Client,
     url: &str,
@@ -170,9 +172,13 @@ async fn download_to_tmp(
 ) -> Result<()> {
     let mut file_handle = fs::File::create(tmp_path).await?;
     let (inner_tx, mut inner_rx) = tokio::sync::mpsc::channel(10);
-    let file_path = file_path.to_string();
+    let file_path_owned = file_path.to_string();
     let client = client.clone();
     let url = url.to_string();
+
+    // 使用原子变量在进度转发任务和定时日志任务之间共享最新下载字节数。
+    let downloaded_bytes = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let downloaded_bytes_forward = downloaded_bytes.clone();
 
     let download_handle = tokio::spawn(async move {
         download::stream_download(&client, &url, &mut file_handle, inner_tx).await
@@ -183,21 +189,59 @@ async fn download_to_tmp(
         while let Some(bytes) = inner_rx.recv().await {
             let delta = bytes.saturating_sub(last_bytes);
             last_bytes = bytes;
+            downloaded_bytes_forward.store(bytes, std::sync::atomic::Ordering::Relaxed);
             let _ = progress_tx
-                .send((file_path.clone(), delta, file_size))
+                .send((file_path_owned.clone(), delta, file_size))
                 .await;
         }
     });
 
+    let logger_handle = if file_size > 1024 * 1024 * 1024 {
+        let file_path = file_path.to_string();
+        let downloaded_bytes = downloaded_bytes.clone();
+        Some(tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            // interval 第一次 tick 会立即触发，先跳过以避免在启动瞬间打印。
+            interval.tick().await;
+            loop {
+                interval.tick().await;
+                let bytes = downloaded_bytes.load(std::sync::atomic::Ordering::Relaxed);
+                let pct = if file_size > 0 {
+                    (bytes as f64 / file_size as f64) * 100.0
+                } else {
+                    0.0
+                };
+                info!(
+                    file = %file_path,
+                    downloaded = bytes,
+                    total = file_size,
+                    percentage = format!("{:.2}%", pct),
+                    "download progress"
+                );
+            }
+        }))
+    } else {
+        None
+    };
+
     let result = match download_handle.await {
         Ok(r) => r,
         Err(e) => {
+            // 下载异常时立即终止定时日志任务并清理进度转发任务。
+            if let Some(h) = logger_handle {
+                h.abort();
+            }
+            drop(progress_forward);
             return Err(CoreError::Io(std::io::Error::other(format!(
                 "download task panicked: {e}"
             ))));
         }
     };
+    // 下载完成后关闭进度通道，使定时日志任务的循环自然结束，随后中止该任务。
     drop(progress_forward);
+    if let Some(h) = logger_handle {
+        h.abort();
+    }
     result
 }
 
