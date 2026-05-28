@@ -11,6 +11,8 @@ struct MsFile {
     sha256: String,
     #[serde(rename = "Size")]
     size: u64,
+    #[serde(rename = "Type")]
+    file_type: String,
 }
 
 /// ModelScope API 返回的数据载荷。
@@ -47,7 +49,8 @@ pub async fn fetch_repo_files(
     base_url: &str,
     model_id: &str,
 ) -> Result<Vec<FileMeta>> {
-    let url = format!("{base_url}/api/v1/models/{model_id}/repo/files?Revision=master");
+    let url =
+        format!("{base_url}/api/v1/models/{model_id}/repo/files?Revision=master&Recursive=true");
     let resp: MsResponse = client.get(&url).send().await?.json().await?;
     if !resp.success {
         return Err(CoreError::ApiResponseError {
@@ -61,6 +64,7 @@ pub async fn fetch_repo_files(
         })?
         .files
         .into_iter()
+        .filter(|f| f.file_type == "blob")
         .map(|f| FileMeta {
             path: f.path,
             sha256: f.sha256,
@@ -79,7 +83,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_repo_files_success() {
         let server = MockServer::start().await;
-        let body = r#"{"Code":200,"Data":{"Files":[{"Path":"model.safetensors","Sha256":"abc123","Size":1024}]},"Success":true}"#;
+        let body = r#"{"Code":200,"Data":{"Files":[{"Path":"model.safetensors","Sha256":"abc123","Size":1024,"Type":"blob"}]},"Success":true}"#;
         Mock::given(method("GET"))
             .and(path("/api/v1/models/test-model/repo/files"))
             .respond_with(ResponseTemplate::new(200).set_body_string(body))

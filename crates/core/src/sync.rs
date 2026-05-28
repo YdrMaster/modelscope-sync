@@ -287,8 +287,8 @@ mod tests {
             "Code": 200,
             "Data": {
                 "Files": [
-                    {"Path": "file1.txt", "Sha256": hash1, "Size": content1.len()},
-                    {"Path": "file2.txt", "Sha256": hash2, "Size": content2.len()}
+                    {"Path": "file1.txt", "Sha256": hash1, "Size": content1.len(), "Type": "blob"},
+                    {"Path": "file2.txt", "Sha256": hash2, "Size": content2.len(), "Type": "blob"}
                 ]
             },
             "Success": true
@@ -341,7 +341,7 @@ mod tests {
             "Code": 200,
             "Data": {
                 "Files": [
-                    {"Path": "model.bin", "Sha256": hash, "Size": content.len()}
+                    {"Path": "model.bin", "Sha256": hash, "Size": content.len(), "Type": "blob"}
                 ]
             },
             "Success": true
@@ -401,7 +401,7 @@ mod tests {
             "Code": 200,
             "Data": {
                 "Files": [
-                    {"Path": "data.bin", "Sha256": wrong_hash, "Size": content.len()}
+                    {"Path": "data.bin", "Sha256": wrong_hash, "Size": content.len(), "Type": "blob"}
                 ]
             },
             "Success": true
@@ -415,7 +415,7 @@ mod tests {
             .await;
 
         Mock::given(method("GET"))
-            .and(path("/resolve/test-model/data.bin"))
+            .and(path("/api/v1/models/test-model/repo"))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(content.as_slice()))
             .mount(&server)
             .await;
